@@ -10,6 +10,10 @@ const nav = [
   { href: "/products", label: "Продукты" },
   { href: "/prices", label: "Цены" },
   { href: "/subscriptions", label: "Подписки" },
+  { href: "/invoices", label: "Инвойсы" },
+  { href: "/payments", label: "Платежи" },
+  { href: "/ledger", label: "Леджер" },
+  { href: "/webhooks", label: "Вебхуки" },
   { href: "/settings", label: "Организация" },
 ];
 
