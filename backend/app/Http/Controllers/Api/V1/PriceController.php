@@ -46,7 +46,8 @@ class PriceController extends Controller
 
         $price = $product->prices()->create([
             'organization_id' => $this->current->id(),
-            ...$request->safe()->except('product_id'),
+            'unit_amount' => 0,
+            ...array_filter($request->safe()->except('product_id'), fn ($v) => $v !== null),
         ]);
 
         return (new PriceResource($price->load('product')))->response()->setStatusCode(201);

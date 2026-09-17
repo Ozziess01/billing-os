@@ -3,6 +3,7 @@
 namespace Database\Factories;
 
 use App\Enums\BillingInterval;
+use App\Enums\UsageType;
 use App\Models\Price;
 use App\Models\Product;
 use Illuminate\Database\Eloquent\Factories\Factory;
@@ -23,6 +24,11 @@ class PriceFactory extends Factory
             'active' => true,
             'metadata' => null,
         ];
+    }
+
+    public function metered(string $unitAmountDecimal = '0.1'): static
+    {
+        return $this->state(['usage_type' => UsageType::Metered, 'unit_amount' => 0, 'unit_amount_decimal' => $unitAmountDecimal]);
     }
 
     public function yearly(): static

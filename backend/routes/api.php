@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\V1\AuthController;
+use App\Http\Controllers\Api\V1\CouponController;
 use App\Http\Controllers\Api\V1\CustomerController;
 use App\Http\Controllers\Api\V1\DashboardController;
 use App\Http\Controllers\Api\V1\InvoiceController;
@@ -10,6 +11,7 @@ use App\Http\Controllers\Api\V1\PaymentController;
 use App\Http\Controllers\Api\V1\PriceController;
 use App\Http\Controllers\Api\V1\ProductController;
 use App\Http\Controllers\Api\V1\SubscriptionController;
+use App\Http\Controllers\Api\V1\UsageController;
 use App\Http\Controllers\Api\V1\WebhookController;
 use App\Http\Middleware\IdempotentRequest;
 use App\Http\Middleware\ResolveOrganization;
@@ -50,6 +52,16 @@ Route::prefix('v1')->group(function () {
             Route::post('subscriptions/{subscription}/cancel', [SubscriptionController::class, 'cancel']);
             Route::post('subscriptions/{subscription}/resume', [SubscriptionController::class, 'resume']);
             Route::post('subscriptions/{subscription}/invoice', [InvoiceController::class, 'forSubscription'])->middleware(IdempotentRequest::class);
+            Route::post('subscriptions/{subscription}/coupon', [CouponController::class, 'apply']);
+            Route::get('subscriptions/{subscription}/usage', [UsageController::class, 'summary']);
+
+            Route::get('usage', [UsageController::class, 'index']);
+            Route::post('usage', [UsageController::class, 'store'])->middleware('throttle:600,1');
+
+            Route::get('coupons', [CouponController::class, 'index']);
+            Route::post('coupons', [CouponController::class, 'store']);
+            Route::get('coupons/{coupon}', [CouponController::class, 'show']);
+            Route::patch('coupons/{coupon}', [CouponController::class, 'update']);
 
             Route::get('invoices', [InvoiceController::class, 'index']);
             Route::post('invoices', [InvoiceController::class, 'store'])->middleware(IdempotentRequest::class);

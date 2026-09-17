@@ -4,6 +4,7 @@ namespace App\Http\Requests;
 
 use App\Billing\Currency;
 use App\Enums\BillingInterval;
+use App\Enums\UsageType;
 use App\Rules\Metadata;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -19,7 +20,10 @@ class PriceRequest extends FormRequest
                 'product_id' => ['required', 'string', 'size:26'],
                 'nickname' => ['nullable', 'string', 'max:120'],
                 'currency' => ['required', 'string', Rule::in(Currency::codes())],
-                'unit_amount' => ['required', 'integer', 'min:0', 'max:'.PHP_INT_MAX],
+                'unit_amount' => [Rule::requiredIf(fn () => $this->input('usage_type', 'licensed') === 'licensed'), 'nullable', 'integer', 'min:0', 'max:'.PHP_INT_MAX],
+                'usage_type' => ['sometimes', Rule::enum(UsageType::class)],
+                // metered: цена за единицу с дробью, в минорных единицах (0.1 = €0.001 за запрос)
+                'unit_amount_decimal' => ['required_if:usage_type,metered', 'nullable', 'numeric', 'min:0', 'max:100000000'],
                 'billing_interval' => ['required', Rule::enum(BillingInterval::class)],
                 'interval_count' => ['sometimes', 'integer', 'min:1', 'max:365'],
                 'active' => ['sometimes', 'boolean'],
@@ -36,6 +40,8 @@ class PriceRequest extends FormRequest
             'billing_interval' => ['prohibited'],
             'interval_count' => ['prohibited'],
             'product_id' => ['prohibited'],
+            'usage_type' => ['prohibited'],
+            'unit_amount_decimal' => ['prohibited'],
         ];
     }
 }

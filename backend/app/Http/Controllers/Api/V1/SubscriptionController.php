@@ -9,6 +9,7 @@ use App\Http\Requests\SubscriptionRequest;
 use App\Http\Resources\SubscriptionResource;
 use App\Models\Customer;
 use App\Models\Subscription;
+use App\Services\CouponService;
 use App\Services\SubscriptionService;
 use App\Tenancy\CurrentOrganization;
 use Carbon\CarbonImmutable;
@@ -23,6 +24,7 @@ class SubscriptionController extends Controller
     public function __construct(
         private readonly CurrentOrganization $current,
         private readonly SubscriptionService $subscriptions,
+        private readonly CouponService $coupons,
     ) {}
 
     public function index(Request $request): AnonymousResourceCollection
@@ -57,12 +59,21 @@ class SubscriptionController extends Controller
             throw ValidationException::withMessages(['customer_id' => 'Клиент не найден.']);
         }
 
+        $coupon = null;
+        if ($request->filled('coupon_code')) {
+            $coupon = $this->coupons->findByCode($this->current->organization(), $request->validated('coupon_code'));
+            if (! $coupon) {
+                throw ValidationException::withMessages(['coupon_code' => 'Купон не найден.']);
+            }
+        }
+
         $subscription = $this->subscriptions->create(
             $customer,
             $request->validated('items'),
             (int) $request->validated('trial_days', 0),
             $request->filled('starts_at') ? CarbonImmutable::parse($request->validated('starts_at')) : null,
             $request->validated('metadata') ?? [],
+            $coupon,
         );
 
         return (new SubscriptionResource($subscription))->response()->setStatusCode(201);
@@ -72,7 +83,7 @@ class SubscriptionController extends Controller
     {
         $this->authorize('view', $subscription);
 
-        return new SubscriptionResource($subscription->load(['customer', 'items.price.product']));
+        return new SubscriptionResource($subscription->load(['customer', 'items.price.product', 'coupon']));
     }
 
     public function cancel(CancelSubscriptionRequest $request, Subscription $subscription): SubscriptionResource

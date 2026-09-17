@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Billing\Money;
 use App\Enums\BillingInterval;
+use App\Enums\UsageType;
 use App\Models\Concerns\BelongsToOrganization;
 use Database\Factories\PriceFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -28,6 +29,8 @@ use Illuminate\Support\Carbon;
  * @property array<array-key, mixed>|null $metadata
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
+ * @property UsageType $usage_type
+ * @property numeric|null $unit_amount_decimal
  * @property-read Organization $organization
  * @property-read Product $product
  * @property-read Collection<int, SubscriptionItem> $subscriptionItems
@@ -49,11 +52,13 @@ use Illuminate\Support\Carbon;
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Price whereOrganizationId($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Price whereProductId($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Price whereUnitAmount($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Price whereUnitAmountDecimal($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Price whereUpdatedAt($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Price whereUsageType($value)
  *
  * @mixin \Eloquent
  */
-#[Fillable(['organization_id', 'product_id', 'nickname', 'currency', 'unit_amount', 'billing_interval', 'interval_count', 'active', 'metadata'])]
+#[Fillable(['organization_id', 'product_id', 'nickname', 'currency', 'unit_amount', 'unit_amount_decimal', 'usage_type', 'billing_interval', 'interval_count', 'active', 'metadata'])]
 class Price extends Model
 {
     use BelongsToOrganization;
@@ -61,12 +66,14 @@ class Price extends Model
     /** @use HasFactory<PriceFactory> */
     use HasFactory, HasUlids;
 
-    protected $attributes = ['active' => true, 'interval_count' => 1];
+    protected $attributes = ['active' => true, 'interval_count' => 1, 'usage_type' => 'licensed'];
 
     protected function casts(): array
     {
         return [
             'unit_amount' => 'integer',
+            'unit_amount_decimal' => 'decimal:8',
+            'usage_type' => UsageType::class,
             'interval_count' => 'integer',
             'billing_interval' => BillingInterval::class,
             'active' => 'boolean',
@@ -97,9 +104,29 @@ class Price extends Model
         return $this->unitMoney()->multiply($quantity);
     }
 
-    /** Приведение к месячной сумме для MRR: годовая цена / 12, недельная × 52 / 12. */
+    /** Приведение к месячной сумме для MRR: годовая цена / 12, недельная × 52 / 12. Metered в MRR не входит. */
     public function monthlyAmount(int $quantity = 1): int
     {
+        if ($this->isMetered()) {
+            return 0;
+        }
+
         return (int) round($this->unit_amount * $quantity * $this->billing_interval->perMonth() / $this->interval_count);
+    }
+
+    public function isMetered(): bool
+    {
+        return $this->usage_type === UsageType::Metered;
+    }
+
+    /**
+     * Сумма за использование: units × unit_amount_decimal, округление один раз на весь период,
+     * half-up в минорных единицах. bcmath - чтобы 10000 × 0.1 не превратилось в 999.9999.
+     */
+    public function usageAmount(int $units): int
+    {
+        $exact = bcmul((string) $units, (string) $this->unit_amount_decimal, 8);
+
+        return (int) bcdiv(bcadd($exact, '0.5', 8), '1', 0);
     }
 }

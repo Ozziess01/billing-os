@@ -16,6 +16,7 @@ class SubscriptionItemResource extends JsonResource
             'price_id' => $this->price_id,
             'price' => new PriceResource($this->whenLoaded('price')),
             'quantity' => $this->quantity,
+            'usage_type' => $this->when($this->relationLoaded('price'), fn () => $this->price->usage_type),
             'amount' => $this->when($this->relationLoaded('price'), fn () => $this->price->amountFor($this->quantity)),
         ];
     }

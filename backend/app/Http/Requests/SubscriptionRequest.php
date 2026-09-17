@@ -16,6 +16,7 @@ class SubscriptionRequest extends FormRequest
             'items.*.quantity' => ['sometimes', 'integer', 'min:1', 'max:100000'],
             'trial_days' => ['sometimes', 'integer', 'min:0', 'max:365'],
             'starts_at' => ['sometimes', 'date'],
+            'coupon_code' => ['nullable', 'string', 'max:40'],
             'metadata' => ['nullable', new Metadata],
         ];
     }

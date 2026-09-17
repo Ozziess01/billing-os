@@ -14,7 +14,7 @@ use Illuminate\Support\Carbon;
  * @property string $request_hash
  * @property string $status
  * @property int|null $response_status
- * @property array<array-key, mixed>|null $response_body
+ * @property string|null $response_body
  * @property CarbonImmutable $expires_at
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at

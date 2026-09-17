@@ -3,9 +3,11 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Carbon;
 
 /**
@@ -17,6 +19,8 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null $updated_at
  * @property-read Price $price
  * @property-read Subscription $subscription
+ * @property-read Collection<int, UsageEvent> $usageEvents
+ * @property-read int|null $usage_events_count
  *
  * @method static \Illuminate\Database\Eloquent\Builder<static>|SubscriptionItem newModelQuery()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|SubscriptionItem newQuery()
@@ -50,5 +54,11 @@ class SubscriptionItem extends Model
     public function price(): BelongsTo
     {
         return $this->belongsTo(Price::class);
+    }
+
+    /** @return HasMany<UsageEvent, $this> */
+    public function usageEvents(): HasMany
+    {
+        return $this->hasMany(UsageEvent::class);
     }
 }
