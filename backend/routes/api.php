@@ -6,13 +6,18 @@ use App\Http\Controllers\Api\V1\DashboardController;
 use App\Http\Controllers\Api\V1\InvoiceController;
 use App\Http\Controllers\Api\V1\LedgerController;
 use App\Http\Controllers\Api\V1\OrganizationController;
+use App\Http\Controllers\Api\V1\PaymentController;
 use App\Http\Controllers\Api\V1\PriceController;
 use App\Http\Controllers\Api\V1\ProductController;
 use App\Http\Controllers\Api\V1\SubscriptionController;
+use App\Http\Controllers\Api\V1\WebhookController;
 use App\Http\Middleware\ResolveOrganization;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')->group(function () {
+    // провайдер стучится сюда без токена: доверие только по подписи тела
+    Route::post('webhooks/{provider}', [WebhookController::class, 'handle'])->middleware('throttle:120,1');
+
     Route::post('auth/register', [AuthController::class, 'register'])->middleware('throttle:10,1');
     Route::post('auth/login', [AuthController::class, 'login'])->middleware('throttle:20,1');
 
@@ -55,8 +60,18 @@ Route::prefix('v1')->group(function () {
             Route::post('invoices/{invoice}/void', [InvoiceController::class, 'void']);
             Route::post('invoices/{invoice}/uncollectible', [InvoiceController::class, 'uncollectible']);
 
+            Route::get('payments', [PaymentController::class, 'index']);
+            Route::post('payments', [PaymentController::class, 'store'])->middleware('throttle:60,1');
+            Route::get('payments/{payment}', [PaymentController::class, 'show']);
+            Route::post('payments/{payment}/refund', [PaymentController::class, 'refund'])->middleware('throttle:60,1');
+            Route::post('payments/{payment}/cancel', [PaymentController::class, 'cancel']);
+            Route::get('refunds', [PaymentController::class, 'refunds']);
+
             Route::get('ledger/accounts', [LedgerController::class, 'accounts']);
             Route::get('ledger/transactions', [LedgerController::class, 'transactions']);
+
+            Route::get('webhooks/events', [WebhookController::class, 'events']);
+            Route::post('providers/fake/payments/{providerPaymentId}/confirm', [WebhookController::class, 'confirmFakePayment']);
         });
     });
 });

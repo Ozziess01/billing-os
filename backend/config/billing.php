@@ -4,6 +4,22 @@ return [
 
     'default_currency' => env('BILLING_DEFAULT_CURRENCY', 'EUR'),
 
+    // срок оплаты открытого инвойса, дней
+    'invoice_due_days' => (int) env('BILLING_INVOICE_DUE_DAYS', 7),
+
+    // ключи идемпотентности живут сутки: повтор позже - уже новый запрос
+    'idempotency_ttl_hours' => (int) env('BILLING_IDEMPOTENCY_TTL_HOURS', 24),
+
+    'default_provider' => env('BILLING_PROVIDER', 'fake'),
+
+    'providers' => [
+        'fake' => [
+            // куда fake-провайдер шлёт вебхуки; внутри compose это nginx, снаружи - APP_URL
+            'webhook_url' => env('FAKE_WEBHOOK_URL', rtrim((string) env('APP_URL', 'http://localhost'), '/').'/api/v1/webhooks/fake'),
+            'async_delay' => (int) env('FAKE_ASYNC_DELAY', 3),
+        ],
+    ],
+
     /*
      * Валюты, которые принимает API, и число знаков после запятой (ISO 4217).
      * Суммы везде хранятся в минорных единицах: 19.99 EUR = 1999, 1000 JPY = 1000.
