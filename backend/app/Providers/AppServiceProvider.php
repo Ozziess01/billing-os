@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use App\Tenancy\CurrentOrganization;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\ServiceProvider;
 
@@ -9,7 +10,8 @@ class AppServiceProvider extends ServiceProvider
 {
     public function register(): void
     {
-        //
+        // одна организация на запрос; в очереди и консоли её заполняют явно
+        $this->app->scoped(CurrentOrganization::class);
     }
 
     public function boot(): void
