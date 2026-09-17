@@ -20,6 +20,9 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->trustProxies(at: '*');
 
+        // API без сессий и страниц входа: гостю всегда отвечаем 401 JSON, а не редиректом
+        $middleware->redirectGuestsTo(fn () => null);
+
         // организация запроса должна быть известна до того, как маршруты начнут искать модели по id
         $middleware->prependToPriorityList(SubstituteBindings::class, ResolveOrganization::class);
     })

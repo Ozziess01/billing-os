@@ -41,6 +41,9 @@ case "$role" in
 
         [ -f .env ] || cp .env.example .env
 
+        # bind mount с хоста: файлы могут прийти без прав на запись для www-data
+        chmod -R a+rwX storage bootstrap/cache 2>/dev/null || true
+
         composer install --no-interaction --prefer-dist --no-progress
 
         if ! grep -q '^APP_KEY=base64:' .env; then
