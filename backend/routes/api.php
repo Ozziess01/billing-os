@@ -3,6 +3,8 @@
 use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\CustomerController;
 use App\Http\Controllers\Api\V1\DashboardController;
+use App\Http\Controllers\Api\V1\InvoiceController;
+use App\Http\Controllers\Api\V1\LedgerController;
 use App\Http\Controllers\Api\V1\OrganizationController;
 use App\Http\Controllers\Api\V1\PriceController;
 use App\Http\Controllers\Api\V1\ProductController;
@@ -41,6 +43,20 @@ Route::prefix('v1')->group(function () {
             Route::get('subscriptions/{subscription}', [SubscriptionController::class, 'show']);
             Route::post('subscriptions/{subscription}/cancel', [SubscriptionController::class, 'cancel']);
             Route::post('subscriptions/{subscription}/resume', [SubscriptionController::class, 'resume']);
+            Route::post('subscriptions/{subscription}/invoice', [InvoiceController::class, 'forSubscription']);
+
+            Route::get('invoices', [InvoiceController::class, 'index']);
+            Route::post('invoices', [InvoiceController::class, 'store']);
+            Route::get('invoices/{invoice}', [InvoiceController::class, 'show']);
+            Route::delete('invoices/{invoice}', [InvoiceController::class, 'destroy']);
+            Route::post('invoices/{invoice}/items', [InvoiceController::class, 'addItem']);
+            Route::delete('invoices/{invoice}/items/{item}', [InvoiceController::class, 'removeItem']);
+            Route::post('invoices/{invoice}/finalize', [InvoiceController::class, 'finalize']);
+            Route::post('invoices/{invoice}/void', [InvoiceController::class, 'void']);
+            Route::post('invoices/{invoice}/uncollectible', [InvoiceController::class, 'uncollectible']);
+
+            Route::get('ledger/accounts', [LedgerController::class, 'accounts']);
+            Route::get('ledger/transactions', [LedgerController::class, 'transactions']);
         });
     });
 });

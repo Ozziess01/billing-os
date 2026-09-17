@@ -20,6 +20,7 @@ class OrganizationService
                 'slug' => $this->uniqueSlug($name),
                 'owner_id' => $owner->id,
                 'default_currency' => $currency ?? config('billing.default_currency'),
+                'webhook_secret' => 'whsec_'.Str::random(40),
             ]);
 
             $organization->members()->create(['user_id' => $owner->id, 'role' => Role::Owner]);

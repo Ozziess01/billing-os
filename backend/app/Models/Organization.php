@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Database\Factories\OrganizationFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -20,11 +21,17 @@ use Illuminate\Support\Carbon;
  * @property string $default_currency
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
+ * @property int $next_invoice_number
+ * @property string|null $webhook_secret
  * @property-read Collection<int, Customer> $customers
  * @property-read int|null $customers_count
+ * @property-read Collection<int, Invoice> $invoices
+ * @property-read int|null $invoices_count
  * @property-read Collection<int, OrganizationMember> $members
  * @property-read int|null $members_count
  * @property-read User $owner
+ * @property-read Collection<int, Payment> $payments
+ * @property-read int|null $payments_count
  * @property-read Collection<int, Price> $prices
  * @property-read int|null $prices_count
  * @property-read Collection<int, Product> $products
@@ -42,17 +49,25 @@ use Illuminate\Support\Carbon;
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Organization whereDefaultCurrency($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Organization whereId($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Organization whereName($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Organization whereNextInvoiceNumber($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Organization whereOwnerId($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Organization whereSlug($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Organization whereUpdatedAt($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Organization whereWebhookSecret($value)
  *
  * @mixin \Eloquent
  */
-#[Fillable(['name', 'slug', 'owner_id', 'default_currency'])]
+#[Fillable(['name', 'slug', 'owner_id', 'default_currency', 'webhook_secret'])]
+#[Hidden(['webhook_secret'])]
 class Organization extends Model
 {
     /** @use HasFactory<OrganizationFactory> */
     use HasFactory;
+
+    protected function casts(): array
+    {
+        return ['webhook_secret' => 'encrypted', 'next_invoice_number' => 'integer'];
+    }
 
     /** @return BelongsTo<User, $this> */
     public function owner(): BelongsTo
@@ -96,5 +111,17 @@ class Organization extends Model
     public function subscriptions(): HasMany
     {
         return $this->hasMany(Subscription::class);
+    }
+
+    /** @return HasMany<Invoice, $this> */
+    public function invoices(): HasMany
+    {
+        return $this->hasMany(Invoice::class);
+    }
+
+    /** @return HasMany<Payment, $this> */
+    public function payments(): HasMany
+    {
+        return $this->hasMany(Payment::class);
     }
 }

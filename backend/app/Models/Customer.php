@@ -22,7 +22,11 @@ use Illuminate\Support\Carbon;
  * @property array<array-key, mixed>|null $metadata
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
+ * @property-read Collection<int, Invoice> $invoices
+ * @property-read int|null $invoices_count
  * @property-read Organization $organization
+ * @property-read Collection<int, Payment> $payments
+ * @property-read int|null $payments_count
  * @property-read Collection<int, Subscription> $subscriptions
  * @property-read int|null $subscriptions_count
  *
@@ -60,5 +64,17 @@ class Customer extends Model
     public function subscriptions(): HasMany
     {
         return $this->hasMany(Subscription::class);
+    }
+
+    /** @return HasMany<Invoice, $this> */
+    public function invoices(): HasMany
+    {
+        return $this->hasMany(Invoice::class);
+    }
+
+    /** @return HasMany<Payment, $this> */
+    public function payments(): HasMany
+    {
+        return $this->hasMany(Payment::class);
     }
 }

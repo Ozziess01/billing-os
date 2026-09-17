@@ -7,7 +7,9 @@ use App\Models\Price;
 use App\Models\Product;
 use App\Models\User;
 use App\Services\OrganizationService;
+use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
@@ -34,7 +36,8 @@ function actingIn(Organization $organization, User|Role $as = Role::Owner): User
     $user = $as instanceof User ? $as : ($as === Role::Owner ? $organization->owner : member($organization, $as));
 
     Sanctum::actingAs($user);
-    test()->withHeader('X-Organization', (string) $organization->id);
+    // заголовки предыдущих запросов (в т.ч. Idempotency-Key) не должны утекать дальше
+    test()->flushHeaders()->withHeader('X-Organization', (string) $organization->id);
 
     return $user;
 }
@@ -54,4 +57,23 @@ function price(Organization $organization, array $attributes = [], ?Product $pro
     return Price::factory()
         ->for($product ?? product($organization))
         ->create(['organization_id' => $organization->id, ...$attributes]);
+}
+
+/**
+ * Ожидаемая ошибка базы (CHECK, триггер): выполняем внутри savepoint,
+ * иначе PostgreSQL отменит транзакцию теста целиком.
+ */
+function dbFails(Closure $statement, string $message): void
+{
+    expect(fn () => DB::transaction($statement))->toThrow(QueryException::class, $message);
+}
+
+/** Открытый инвойс на одну позицию через API от имени текущего пользователя. */
+function openInvoice(Organization $organization, int $amount = 1999): string
+{
+    $price = price($organization, ['unit_amount' => $amount]);
+    $id = test()->postJson('/api/v1/invoices', ['customer_id' => customer($organization)->id, 'items' => [['price_id' => $price->id]]])->json('data.id');
+    test()->postJson("/api/v1/invoices/{$id}/finalize")->assertOk();
+
+    return $id;
 }

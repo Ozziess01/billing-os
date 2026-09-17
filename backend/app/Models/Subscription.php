@@ -2,10 +2,10 @@
 
 namespace App\Models;
 
-use App\Billing\InvalidTransition;
 use App\Billing\Money;
 use App\Enums\SubscriptionStatus;
 use App\Models\Concerns\BelongsToOrganization;
+use App\Models\Concerns\TransitionsStatus;
 use Carbon\CarbonImmutable;
 use Database\Factories\SubscriptionFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -32,6 +32,8 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  * @property-read Customer $customer
+ * @property-read Collection<int, Invoice> $invoices
+ * @property-read int|null $invoices_count
  * @property-read Collection<int, SubscriptionItem> $items
  * @property-read int|null $items_count
  * @property-read Organization $organization
@@ -67,7 +69,7 @@ class Subscription extends Model
     use BelongsToOrganization;
 
     /** @use HasFactory<SubscriptionFactory> */
-    use HasFactory, HasUlids;
+    use HasFactory, HasUlids, TransitionsStatus;
 
     protected function casts(): array
     {
@@ -94,6 +96,12 @@ class Subscription extends Model
         return $this->hasMany(SubscriptionItem::class);
     }
 
+    /** @return HasMany<Invoice, $this> */
+    public function invoices(): HasMany
+    {
+        return $this->hasMany(Invoice::class);
+    }
+
     /** Сумма за один период по всем позициям. */
     public function periodAmount(): Money
     {
@@ -104,32 +112,6 @@ class Subscription extends Model
         }
 
         return $total;
-    }
-
-    /**
-     * Смена статуса строго по таблице переходов и одним атомарным UPDATE ... WHERE status = :from:
-     * два процесса не переведут подписку дважды, а canceled никогда не оживёт.
-     *
-     * @param  array<string, mixed>  $extra
-     */
-    public function transition(SubscriptionStatus $to, array $extra = []): void
-    {
-        $from = $this->status;
-
-        if (! $from->canTransitionTo($to)) {
-            throw InvalidTransition::between("Subscription {$this->id}", $from->value, $to->value);
-        }
-
-        $changed = static::query()
-            ->whereKey($this->id)
-            ->where('status', $from->value)
-            ->update(['status' => $to->value, 'updated_at' => now(), ...$extra]);
-
-        if ($changed !== 1) {
-            throw InvalidTransition::between("Subscription {$this->id}", $from->value, $to->value);
-        }
-
-        $this->forceFill(['status' => $to, ...$extra])->syncOriginal();
     }
 
     public function isCanceled(): bool

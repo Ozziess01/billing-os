@@ -2,7 +2,7 @@
 
 namespace App\Enums;
 
-enum SubscriptionStatus: string
+enum SubscriptionStatus: string implements BillingStatus
 {
     case Trialing = 'trialing';
     case Active = 'active';
@@ -23,7 +23,7 @@ enum SubscriptionStatus: string
         };
     }
 
-    public function canTransitionTo(self $to): bool
+    public function canTransitionTo(BillingStatus $to): bool
     {
         return in_array($to, $this->transitions(), true);
     }
