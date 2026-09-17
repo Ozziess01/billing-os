@@ -47,8 +47,13 @@ function handleUnauthorized() {
 
 type Method = "GET" | "POST" | "PATCH" | "DELETE";
 
-async function request<T>(method: Method, path: string, body?: unknown): Promise<T> {
+export interface RequestOptions {
+  idempotencyKey?: string;
+}
+
+async function request<T>(method: Method, path: string, body?: unknown, options: RequestOptions = {}): Promise<T> {
   const headers: Record<string, string> = { Accept: "application/json" };
+  if (options.idempotencyKey) headers["Idempotency-Key"] = options.idempotencyKey;
   const token = session.token();
   const organization = session.organization();
   if (token) headers.Authorization = `Bearer ${token}`;
@@ -75,10 +80,15 @@ async function request<T>(method: Method, path: string, body?: unknown): Promise
 
 export const api = {
   get: <T>(path: string) => request<T>("GET", path),
-  post: <T>(path: string, body?: unknown) => request<T>("POST", path, body),
+  post: <T>(path: string, body?: unknown, options?: RequestOptions) => request<T>("POST", path, body, options),
   patch: <T>(path: string, body?: unknown) => request<T>("PATCH", path, body),
   delete: <T>(path: string) => request<T>("DELETE", path),
 };
+
+/** Ключ идемпотентности на одну попытку пользователя: повтор клика не создаст второй платёж. */
+export function idempotencyKey(): string {
+  return typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
 
 export function query(params: Record<string, string | number | boolean | undefined | null>): string {
   const search = new URLSearchParams();

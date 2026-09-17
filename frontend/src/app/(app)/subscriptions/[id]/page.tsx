@@ -2,16 +2,18 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { StatusBadge } from "@/components/subscriptions/StatusBadge";
 import { BackLink, Button, Card, ErrorNote, Money, PageTitle, Table, Td, Th } from "@/components/ui";
 import { useOrganization } from "@/hooks/useAuth";
 import { formatDate } from "@/lib/format";
 import { formatMoney, intervalText } from "@/lib/money";
+import { invoices } from "@/services/invoices";
 import { subscriptions } from "@/services/subscriptions";
 
 export default function SubscriptionPage() {
   const { id } = useParams<{ id: string }>();
+  const router = useRouter();
   const client = useQueryClient();
   const { current } = useOrganization();
   const canManage = current?.role !== "viewer";
@@ -24,6 +26,13 @@ export default function SubscriptionPage() {
   };
   const cancel = useMutation({ mutationFn: (atPeriodEnd: boolean) => subscriptions.cancel(id, atPeriodEnd), onSuccess: refresh });
   const resume = useMutation({ mutationFn: () => subscriptions.resume(id), onSuccess: refresh });
+  const issue = useMutation({
+    mutationFn: () => invoices.forSubscription(id),
+    onSuccess: (res) => {
+      client.invalidateQueries({ queryKey: ["invoices"] });
+      router.push(`/invoices/${res.data.id}`);
+    },
+  });
 
   if (isLoading) return <div className="text-sm text-muted">Загрузка…</div>;
   if (error || !data) return <ErrorNote error={error ?? new Error("Подписка не найдена.")} />;
@@ -40,6 +49,9 @@ export default function SubscriptionPage() {
         actions={
           canManage && live ? (
             <>
+              <Button variant="secondary" disabled={issue.isPending} onClick={() => issue.mutate()}>
+                Выставить инвойс за период
+              </Button>
               {s.cancel_at_period_end ? (
                 <Button variant="secondary" disabled={resume.isPending} onClick={() => resume.mutate()}>
                   Возобновить
@@ -56,7 +68,7 @@ export default function SubscriptionPage() {
           ) : undefined
         }
       />
-      {(cancel.error || resume.error) && <div className="mb-4"><ErrorNote error={cancel.error ?? resume.error} /></div>}
+      {(cancel.error || resume.error || issue.error) && <div className="mb-4"><ErrorNote error={cancel.error ?? resume.error ?? issue.error} /></div>}
 
       <div className="grid gap-6 lg:grid-cols-3">
         <Card title="Состояние" className="lg:col-span-1">

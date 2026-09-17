@@ -46,6 +46,9 @@ export default function CustomerPage() {
         subtitle={c.email ?? undefined}
         actions={
           <>
+            <Link href={`/invoices?customer_id=${c.id}`}>
+              <Button variant="secondary">Инвойсы</Button>
+            </Link>
             <Link href={`/subscriptions?customer_id=${c.id}&new=1`}>
               <Button variant="secondary">Оформить подписку</Button>
             </Link>

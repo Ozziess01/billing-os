@@ -105,6 +105,130 @@ export interface Subscription {
   updated_at: string;
 }
 
+export type InvoiceStatus = "draft" | "open" | "paid" | "void" | "uncollectible";
+
+export interface InvoiceItem {
+  id: string;
+  price_id: string | null;
+  description: string;
+  quantity: number;
+  unit_amount: Money;
+  amount: Money;
+  period_start: string | null;
+  period_end: string | null;
+}
+
+export interface Invoice {
+  id: string;
+  number: string | null;
+  status: InvoiceStatus;
+  customer_id: string;
+  customer?: Customer;
+  subscription_id: string | null;
+  currency: string;
+  subtotal: Money;
+  discount: Money;
+  total: Money;
+  amount_paid: Money;
+  amount_due: Money;
+  description: string | null;
+  period_start: string | null;
+  period_end: string | null;
+  due_at: string | null;
+  finalized_at: string | null;
+  paid_at: string | null;
+  voided_at: string | null;
+  uncollectible_at: string | null;
+  items?: InvoiceItem[];
+  payments?: Payment[];
+  metadata: Metadata;
+  created_at: string;
+  updated_at: string;
+}
+
+export type PaymentStatus = "pending" | "processing" | "succeeded" | "failed" | "canceled";
+
+export interface Payment {
+  id: string;
+  invoice_id: string;
+  invoice?: Invoice;
+  customer_id: string;
+  customer?: Customer;
+  attempt_number: number;
+  status: PaymentStatus;
+  amount: Money;
+  amount_refunded: Money;
+  refundable_amount: Money;
+  provider: string;
+  provider_payment_id: string | null;
+  payment_method: string;
+  failure_code: string | null;
+  failure_message: string | null;
+  next_action: { type: string; provider_payment_id?: string } | null;
+  refunds?: Refund[];
+  succeeded_at: string | null;
+  failed_at: string | null;
+  canceled_at: string | null;
+  created_at: string;
+}
+
+export type RefundStatus = "pending" | "succeeded" | "failed";
+
+export interface Refund {
+  id: string;
+  payment_id: string;
+  status: RefundStatus;
+  amount: Money;
+  reason: string | null;
+  provider_refund_id: string | null;
+  failure_message: string | null;
+  succeeded_at: string | null;
+  failed_at: string | null;
+  created_at: string;
+}
+
+export type LedgerAccountType = "cash" | "receivable" | "revenue" | "adjustments";
+
+export interface LedgerAccount {
+  id: string;
+  type: LedgerAccountType;
+  name: string;
+  currency: string;
+  balance: Money;
+}
+
+export interface LedgerEntry {
+  account_id: string;
+  account_type: LedgerAccountType | null;
+  account_name: string | null;
+  debit: Money;
+  credit: Money;
+}
+
+export interface LedgerTransaction {
+  id: string;
+  type: "invoice" | "payment" | "refund" | "adjustment";
+  description: string;
+  amount: Money;
+  reference_type: string;
+  reference_id: string;
+  posted_at: string;
+  entries?: LedgerEntry[];
+}
+
+export interface WebhookEvent {
+  id: string;
+  provider: string;
+  event_id: string;
+  type: string;
+  status: "received" | "processing" | "processed" | "ignored" | "failed";
+  attempts: number;
+  error: string | null;
+  payload: Record<string, unknown>;
+  processed_at: string | null;
+  created_at: string;
+}
+
 export interface Dashboard {
   customers: number;
   products: number;
