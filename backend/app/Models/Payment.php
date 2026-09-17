@@ -39,12 +39,14 @@ use Illuminate\Support\Carbon;
  * @property array<array-key, mixed>|null $metadata
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
+ * @property bool $automatic
  * @property-read Customer $customer
  * @property-read Invoice $invoice
  * @property-read Organization $organization
  * @property-read Collection<int, Refund> $refunds
  * @property-read int|null $refunds_count
  *
+ * @method static \Database\Factories\PaymentFactory factory($count = null, $state = [])
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Payment forOrganization(\App\Models\Organization|int $organization)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Payment newModelQuery()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Payment newQuery()
@@ -52,6 +54,7 @@ use Illuminate\Support\Carbon;
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Payment whereAmount($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Payment whereAmountRefunded($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Payment whereAttemptNumber($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Payment whereAutomatic($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Payment whereCanceledAt($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Payment whereCreatedAt($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Payment whereCurrency($value)
@@ -75,7 +78,7 @@ use Illuminate\Support\Carbon;
  */
 #[Fillable([
     'organization_id', 'customer_id', 'invoice_id', 'attempt_number', 'status', 'currency', 'amount', 'amount_refunded',
-    'provider', 'provider_payment_id', 'payment_method', 'failure_code', 'failure_message', 'next_action',
+    'provider', 'provider_payment_id', 'payment_method', 'automatic', 'failure_code', 'failure_message', 'next_action',
     'succeeded_at', 'failed_at', 'canceled_at', 'metadata',
 ])]
 class Payment extends Model
@@ -85,7 +88,7 @@ class Payment extends Model
     /** @use HasFactory<PaymentFactory> */
     use HasFactory, HasUlids, TransitionsStatus;
 
-    protected $attributes = ['amount_refunded' => 0];
+    protected $attributes = ['amount_refunded' => 0, 'automatic' => false];
 
     protected function casts(): array
     {
@@ -94,6 +97,7 @@ class Payment extends Model
             'attempt_number' => 'integer',
             'amount' => 'integer',
             'amount_refunded' => 'integer',
+            'automatic' => 'boolean',
             'next_action' => 'array',
             'succeeded_at' => 'immutable_datetime',
             'failed_at' => 'immutable_datetime',

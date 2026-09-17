@@ -22,6 +22,7 @@ use Illuminate\Support\Carbon;
  * @property array<array-key, mixed>|null $metadata
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
+ * @property string|null $default_payment_method
  * @property-read Collection<int, Invoice> $invoices
  * @property-read int|null $invoices_count
  * @property-read Organization $organization
@@ -36,6 +37,7 @@ use Illuminate\Support\Carbon;
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Customer newQuery()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Customer query()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Customer whereCreatedAt($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Customer whereDefaultPaymentMethod($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Customer whereDescription($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Customer whereEmail($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Customer whereExternalId($value)
@@ -47,7 +49,7 @@ use Illuminate\Support\Carbon;
  *
  * @mixin \Eloquent
  */
-#[Fillable(['organization_id', 'external_id', 'name', 'email', 'description', 'metadata'])]
+#[Fillable(['organization_id', 'external_id', 'name', 'email', 'description', 'default_payment_method', 'metadata'])]
 class Customer extends Model
 {
     use BelongsToOrganization;

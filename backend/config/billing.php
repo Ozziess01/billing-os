@@ -10,6 +10,12 @@ return [
     // ключи идемпотентности живут сутки: повтор позже - уже новый запрос
     'idempotency_ttl_hours' => (int) env('BILLING_IDEMPOTENCY_TTL_HOURS', 24),
 
+    // автосписание: через сколько дней повторять после неудачи и что делать, когда попытки кончились
+    'dunning' => [
+        'retry_after_days' => [1, 3, 7],
+        'cancel_after_retries' => (bool) env('BILLING_CANCEL_AFTER_RETRIES', true),
+    ],
+
     'default_provider' => env('BILLING_PROVIDER', 'fake'),
 
     'providers' => [

@@ -76,6 +76,10 @@ class InvoiceController extends Controller
 
         $invoice = $this->invoices->createForSubscriptionPeriod($subscription);
 
+        if (! $invoice) {
+            throw ValidationException::withMessages(['subscription' => 'За этот период выставлять нечего.']);
+        }
+
         if ($invoice->isDraft()) {
             $invoice = $this->invoices->finalize($invoice);
         }

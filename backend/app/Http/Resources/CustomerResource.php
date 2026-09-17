@@ -17,6 +17,7 @@ class CustomerResource extends JsonResource
             'name' => $this->name,
             'email' => $this->email,
             'description' => $this->description,
+            'default_payment_method' => $this->default_payment_method,
             'metadata' => $this->metadata ?? (object) [],
             'subscriptions_count' => $this->whenCounted('subscriptions'),
             'subscriptions' => SubscriptionResource::collection($this->whenLoaded('subscriptions')),

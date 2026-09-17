@@ -41,6 +41,10 @@ use Illuminate\Support\Carbon;
  * @property array<array-key, mixed>|null $metadata
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
+ * @property bool $auto_collect
+ * @property CarbonImmutable|null $next_payment_attempt_at
+ * @property int $collection_attempts
+ * @property string|null $coupon_id
  * @property-read Customer $customer
  * @property-read Collection<int, InvoiceItem> $items
  * @property-read int|null $items_count
@@ -49,12 +53,16 @@ use Illuminate\Support\Carbon;
  * @property-read int|null $payments_count
  * @property-read Subscription|null $subscription
  *
+ * @method static \Database\Factories\InvoiceFactory factory($count = null, $state = [])
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Invoice forOrganization(\App\Models\Organization|int $organization)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Invoice newModelQuery()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Invoice newQuery()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Invoice query()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Invoice whereAmountDue($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Invoice whereAmountPaid($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Invoice whereAutoCollect($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Invoice whereCollectionAttempts($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Invoice whereCouponId($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Invoice whereCreatedAt($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Invoice whereCurrency($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Invoice whereCustomerId($value)
@@ -64,6 +72,7 @@ use Illuminate\Support\Carbon;
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Invoice whereFinalizedAt($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Invoice whereId($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Invoice whereMetadata($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Invoice whereNextPaymentAttemptAt($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Invoice whereNumber($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Invoice whereOrganizationId($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Invoice wherePaidAt($value)
@@ -81,7 +90,8 @@ use Illuminate\Support\Carbon;
  */
 #[Fillable([
     'organization_id', 'customer_id', 'subscription_id', 'number', 'status', 'currency',
-    'subtotal', 'discount', 'total', 'amount_paid', 'amount_due', 'description',
+    'subtotal', 'discount', 'total', 'amount_paid', 'amount_due', 'description', 'coupon_id',
+    'auto_collect', 'next_payment_attempt_at', 'collection_attempts',
     'period_start', 'period_end', 'due_at', 'finalized_at', 'paid_at', 'voided_at', 'uncollectible_at', 'metadata',
 ])]
 class Invoice extends Model
@@ -91,7 +101,7 @@ class Invoice extends Model
     /** @use HasFactory<InvoiceFactory> */
     use HasFactory, HasUlids, TransitionsStatus;
 
-    protected $attributes = ['subtotal' => 0, 'discount' => 0, 'total' => 0, 'amount_paid' => 0, 'amount_due' => 0];
+    protected $attributes = ['subtotal' => 0, 'discount' => 0, 'total' => 0, 'amount_paid' => 0, 'amount_due' => 0, 'auto_collect' => false, 'collection_attempts' => 0];
 
     protected function casts(): array
     {
@@ -109,6 +119,9 @@ class Invoice extends Model
             'paid_at' => 'immutable_datetime',
             'voided_at' => 'immutable_datetime',
             'uncollectible_at' => 'immutable_datetime',
+            'auto_collect' => 'boolean',
+            'next_payment_attempt_at' => 'immutable_datetime',
+            'collection_attempts' => 'integer',
             'metadata' => 'array',
         ];
     }

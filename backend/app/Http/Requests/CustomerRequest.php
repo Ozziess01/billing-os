@@ -16,6 +16,7 @@ class CustomerRequest extends FormRequest
             'email' => ['nullable', 'email', 'max:254'],
             'external_id' => ['nullable', 'string', 'max:120'],
             'description' => ['nullable', 'string', 'max:2000'],
+            'default_payment_method' => ['nullable', 'string', 'max:120'],
             'metadata' => ['nullable', new Metadata],
         ];
     }

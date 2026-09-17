@@ -31,6 +31,10 @@ use Illuminate\Support\Carbon;
  * @property array<array-key, mixed>|null $metadata
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
+ * @property string|null $cancel_reason
+ * @property CarbonImmutable|null $ended_at
+ * @property string|null $coupon_id
+ * @property-read Coupon|null $coupon
  * @property-read Customer $customer
  * @property-read Collection<int, Invoice> $invoices
  * @property-read int|null $invoices_count
@@ -44,12 +48,15 @@ use Illuminate\Support\Carbon;
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Subscription newQuery()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Subscription query()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Subscription whereCancelAtPeriodEnd($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Subscription whereCancelReason($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Subscription whereCanceledAt($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Subscription whereCouponId($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Subscription whereCreatedAt($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Subscription whereCurrency($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Subscription whereCurrentPeriodEnd($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Subscription whereCurrentPeriodStart($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Subscription whereCustomerId($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|Subscription whereEndedAt($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Subscription whereId($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Subscription whereMetadata($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|Subscription whereOrganizationId($value)
@@ -60,9 +67,9 @@ use Illuminate\Support\Carbon;
  * @mixin \Eloquent
  */
 #[Fillable([
-    'organization_id', 'customer_id', 'status', 'currency',
+    'organization_id', 'customer_id', 'status', 'currency', 'coupon_id',
     'trial_ends_at', 'current_period_start', 'current_period_end',
-    'cancel_at_period_end', 'canceled_at', 'metadata',
+    'cancel_at_period_end', 'canceled_at', 'cancel_reason', 'ended_at', 'metadata',
 ])]
 class Subscription extends Model
 {
@@ -80,6 +87,7 @@ class Subscription extends Model
             'current_period_end' => 'immutable_datetime',
             'cancel_at_period_end' => 'boolean',
             'canceled_at' => 'immutable_datetime',
+            'ended_at' => 'immutable_datetime',
             'metadata' => 'array',
         ];
     }
@@ -102,13 +110,21 @@ class Subscription extends Model
         return $this->hasMany(Invoice::class);
     }
 
-    /** Сумма за один период по всем позициям. */
+    /** @return BelongsTo<Coupon, $this> */
+    public function coupon(): BelongsTo
+    {
+        return $this->belongsTo(Coupon::class);
+    }
+
+    /** Сумма за один период по фиксированным позициям; metered считается по факту использования. */
     public function periodAmount(): Money
     {
         $total = Money::zero($this->currency);
 
         foreach ($this->items as $item) {
-            $total = $total->add($item->price->amountFor($item->quantity));
+            if (! $item->price->isMetered()) {
+                $total = $total->add($item->price->amountFor($item->quantity));
+            }
         }
 
         return $total;

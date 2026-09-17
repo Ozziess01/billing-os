@@ -29,11 +29,11 @@ class PaymentService
         private readonly LedgerService $ledger,
     ) {}
 
-    public function pay(Invoice $invoice, string $paymentMethod, ?string $providerName = null): Payment
+    public function pay(Invoice $invoice, string $paymentMethod, ?string $providerName = null, bool $automatic = false): Payment
     {
         $provider = $this->providers->get($providerName);
 
-        $payment = DB::transaction(function () use ($invoice, $paymentMethod, $provider) {
+        $payment = DB::transaction(function () use ($invoice, $paymentMethod, $provider, $automatic) {
             $invoice = Invoice::query()->lockForUpdate()->findOrFail($invoice->id);
 
             if (! $invoice->isOpen()) {
@@ -57,6 +57,7 @@ class PaymentService
                     'amount' => $invoice->amount_due,
                     'provider' => $provider->name(),
                     'payment_method' => $paymentMethod,
+                    'automatic' => $automatic,
                 ]);
             } catch (UniqueConstraintViolationException) {
                 // частичный уникальный индекс: параллельный запрос успел первым

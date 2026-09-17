@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Enums\CouponDuration;
 use App\Enums\InvoiceStatus;
 use App\Events\Billing\InvoiceFinalized;
 use App\Events\Billing\InvoicePaid;
@@ -12,6 +13,9 @@ use App\Models\InvoiceItem;
 use App\Models\Payment;
 use App\Models\Price;
 use App\Models\Subscription;
+use App\Models\SubscriptionItem;
+use App\Models\UsageEvent;
+use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -48,13 +52,14 @@ class InvoiceService
     }
 
     /**
-     * Инвойс за текущий период подписки: по строке на каждую позицию, с периодом на строках.
-     * Открытый инвойс за этот период уже есть - возвращаем его, второй не создаём.
+     * Инвойс за текущий период подписки: фиксированные позиции - вперёд за новый период,
+     * metered - по факту за прошедший ($usageFrom..$usageTo). Открытый инвойс за этот период
+     * уже есть - возвращаем его. Нечего выставлять (только metered без использования) - null.
      */
-    public function createForSubscriptionPeriod(Subscription $subscription): Invoice
+    public function createForSubscriptionPeriod(Subscription $subscription, ?CarbonImmutable $usageFrom = null, ?CarbonImmutable $usageTo = null): ?Invoice
     {
-        return DB::transaction(function () use ($subscription) {
-            $subscription = Subscription::query()->lockForUpdate()->with('items')->findOrFail($subscription->id);
+        return DB::transaction(function () use ($subscription, $usageFrom, $usageTo) {
+            $subscription = Subscription::query()->lockForUpdate()->with('items.price.product', 'coupon')->findOrFail($subscription->id);
 
             $existing = $subscription->invoices()
                 ->where('period_start', $subscription->current_period_start)
@@ -73,9 +78,18 @@ class InvoiceService
                 'currency' => $subscription->currency,
                 'period_start' => $subscription->current_period_start,
                 'period_end' => $subscription->current_period_end,
+                'auto_collect' => true,
             ]);
 
             foreach ($subscription->items as $item) {
+                if ($item->price->isMetered()) {
+                    if ($usageFrom && $usageTo) {
+                        $this->addUsageLine($invoice, $item, $usageFrom, $usageTo);
+                    }
+
+                    continue;
+                }
+
                 $this->addItem($invoice, [
                     'price_id' => $item->price_id,
                     'quantity' => $item->quantity,
@@ -84,8 +98,77 @@ class InvoiceService
                 ]);
             }
 
+            if (! $invoice->items()->exists()) {
+                $invoice->delete();
+
+                return null;
+            }
+
+            $this->applyCoupon($invoice, $subscription);
+
             return $invoice->load('items', 'customer');
         });
+    }
+
+    /** Строка за использование: units × unit_amount_decimal, округление один раз; события помечаются выставленными. */
+    private function addUsageLine(Invoice $invoice, SubscriptionItem $item, CarbonImmutable $from, CarbonImmutable $to): void
+    {
+        // сначала блокируем строки, потом считаем: параллельный отчёт не попадёт в уже закрытый период
+        $ids = UsageEvent::query()
+            ->where('subscription_item_id', $item->id)
+            ->whereNull('invoice_item_id')
+            ->where('timestamp', '>=', $from)
+            ->where('timestamp', '<', $to)
+            ->lockForUpdate()
+            ->pluck('id');
+
+        if ($ids->isEmpty()) {
+            return;
+        }
+
+        $units = (int) UsageEvent::query()->whereIn('id', $ids)->sum('quantity');
+
+        $price = $item->price;
+        $amount = $price->usageAmount($units);
+        $line = $invoice->items()->create([
+            'price_id' => $price->id,
+            'description' => trim($price->product->name.' '.($price->nickname ? "({$price->nickname})" : '')).": {$units} × ".rtrim(rtrim((string) $price->unit_amount_decimal, '0'), '.').' '.$price->currency.'/100',
+            'quantity' => 1,
+            'unit_amount' => $amount,
+            'amount' => $amount,
+            'currency' => $invoice->currency,
+            'period_start' => $from,
+            'period_end' => $to,
+            'metadata' => ['units' => $units, 'unit_amount_decimal' => (string) $price->unit_amount_decimal],
+        ]);
+
+        UsageEvent::query()->whereIn('id', $ids)->update(['invoice_item_id' => $line->id]);
+        $this->recalculate($invoice);
+    }
+
+    /** Купон подписки: forever - на каждый инвойс, once - только на первый. */
+    private function applyCoupon(Invoice $invoice, Subscription $subscription): void
+    {
+        $coupon = $subscription->coupon;
+
+        if (! $coupon) {
+            return;
+        }
+
+        if ($coupon->duration === CouponDuration::Once && $subscription->invoices()->where('coupon_id', $coupon->id)->whereKeyNot($invoice->id)->exists()) {
+            return;
+        }
+
+        $discount = $coupon->discountFor($invoice->subtotal, $invoice->currency);
+        $total = $invoice->subtotal - $discount;
+
+        // одним UPDATE, иначе CHECK total = subtotal - discount сработает раньше пересчёта
+        $invoice->forceFill([
+            'coupon_id' => $coupon->id,
+            'discount' => $discount,
+            'total' => $total,
+            'amount_due' => $total - $invoice->amount_paid,
+        ])->save();
     }
 
     /** @param  array{price_id?: string|null, description?: string|null, quantity?: int, unit_amount?: int|null, period_start?: mixed, period_end?: mixed}  $item */
