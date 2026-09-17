@@ -1,7 +1,10 @@
 <?php
 
 use App\Enums\Role;
+use App\Models\Customer;
 use App\Models\Organization;
+use App\Models\Price;
+use App\Models\Product;
 use App\Models\User;
 use App\Services\OrganizationService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -34,4 +37,21 @@ function actingIn(Organization $organization, User|Role $as = Role::Owner): User
     test()->withHeader('X-Organization', (string) $organization->id);
 
     return $user;
+}
+
+function customer(Organization $organization, array $attributes = []): Customer
+{
+    return Customer::factory()->for($organization)->create($attributes);
+}
+
+function product(Organization $organization, array $attributes = []): Product
+{
+    return Product::factory()->for($organization)->create($attributes);
+}
+
+function price(Organization $organization, array $attributes = [], ?Product $product = null): Price
+{
+    return Price::factory()
+        ->for($product ?? product($organization))
+        ->create(['organization_id' => $organization->id, ...$attributes]);
 }

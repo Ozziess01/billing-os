@@ -1,7 +1,10 @@
 <?php
 
 use App\Http\Controllers\Api\V1\AuthController;
+use App\Http\Controllers\Api\V1\CustomerController;
 use App\Http\Controllers\Api\V1\OrganizationController;
+use App\Http\Controllers\Api\V1\PriceController;
+use App\Http\Controllers\Api\V1\ProductController;
 use App\Http\Middleware\ResolveOrganization;
 use Illuminate\Support\Facades\Route;
 
@@ -25,7 +28,9 @@ Route::prefix('v1')->group(function () {
         Route::post('organizations/{organization}/transfer', [OrganizationController::class, 'transfer']);
 
         Route::middleware(ResolveOrganization::class)->group(function () {
-            //
+            Route::apiResource('customers', CustomerController::class);
+            Route::apiResource('products', ProductController::class);
+            Route::apiResource('prices', PriceController::class);
         });
     });
 });

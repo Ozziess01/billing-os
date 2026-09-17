@@ -1,5 +1,7 @@
 <?php
 
+use App\Billing\CurrencyMismatch;
+use App\Billing\InvalidTransition;
 use App\Http\Middleware\ResolveOrganization;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -25,4 +27,9 @@ return Application::configure(basePath: dirname(__DIR__))
         $exceptions->shouldRenderJsonWhen(
             fn (Request $request) => $request->is('api/*') || $request->expectsJson(),
         );
+
+        // нарушение доменных правил - это конфликт состояния, а не ошибка сервера
+        $exceptions->render(fn (InvalidTransition|CurrencyMismatch $e, Request $request) => response()->json([
+            'message' => $e->getMessage(),
+        ], 409));
     })->create();
