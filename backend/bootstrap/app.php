@@ -2,6 +2,7 @@
 
 use App\Billing\CurrencyMismatch;
 use App\Billing\InvalidTransition;
+use App\Http\Middleware\IdempotentRequest;
 use App\Http\Middleware\ResolveOrganization;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -23,8 +24,9 @@ return Application::configure(basePath: dirname(__DIR__))
         // API без сессий и страниц входа: гостю всегда отвечаем 401 JSON, а не редиректом
         $middleware->redirectGuestsTo(fn () => null);
 
-        // организация запроса должна быть известна до того, как маршруты начнут искать модели по id
+        // организация запроса должна быть известна до биндинга моделей и до проверки Idempotency-Key
         $middleware->prependToPriorityList(SubstituteBindings::class, ResolveOrganization::class);
+        $middleware->appendToPriorityList(ResolveOrganization::class, IdempotentRequest::class);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(

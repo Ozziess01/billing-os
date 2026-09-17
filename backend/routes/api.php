@@ -11,6 +11,7 @@ use App\Http\Controllers\Api\V1\PriceController;
 use App\Http\Controllers\Api\V1\ProductController;
 use App\Http\Controllers\Api\V1\SubscriptionController;
 use App\Http\Controllers\Api\V1\WebhookController;
+use App\Http\Middleware\IdempotentRequest;
 use App\Http\Middleware\ResolveOrganization;
 use Illuminate\Support\Facades\Route;
 
@@ -48,22 +49,23 @@ Route::prefix('v1')->group(function () {
             Route::get('subscriptions/{subscription}', [SubscriptionController::class, 'show']);
             Route::post('subscriptions/{subscription}/cancel', [SubscriptionController::class, 'cancel']);
             Route::post('subscriptions/{subscription}/resume', [SubscriptionController::class, 'resume']);
-            Route::post('subscriptions/{subscription}/invoice', [InvoiceController::class, 'forSubscription']);
+            Route::post('subscriptions/{subscription}/invoice', [InvoiceController::class, 'forSubscription'])->middleware(IdempotentRequest::class);
 
             Route::get('invoices', [InvoiceController::class, 'index']);
-            Route::post('invoices', [InvoiceController::class, 'store']);
+            Route::post('invoices', [InvoiceController::class, 'store'])->middleware(IdempotentRequest::class);
             Route::get('invoices/{invoice}', [InvoiceController::class, 'show']);
             Route::delete('invoices/{invoice}', [InvoiceController::class, 'destroy']);
             Route::post('invoices/{invoice}/items', [InvoiceController::class, 'addItem']);
             Route::delete('invoices/{invoice}/items/{item}', [InvoiceController::class, 'removeItem']);
-            Route::post('invoices/{invoice}/finalize', [InvoiceController::class, 'finalize']);
+            Route::post('invoices/{invoice}/finalize', [InvoiceController::class, 'finalize'])->middleware(IdempotentRequest::class);
             Route::post('invoices/{invoice}/void', [InvoiceController::class, 'void']);
             Route::post('invoices/{invoice}/uncollectible', [InvoiceController::class, 'uncollectible']);
 
+            // финансовые POST принимают Idempotency-Key: повтор с тем же ключом отдаёт первый ответ
             Route::get('payments', [PaymentController::class, 'index']);
-            Route::post('payments', [PaymentController::class, 'store'])->middleware('throttle:60,1');
+            Route::post('payments', [PaymentController::class, 'store'])->middleware([IdempotentRequest::class, 'throttle:60,1']);
             Route::get('payments/{payment}', [PaymentController::class, 'show']);
-            Route::post('payments/{payment}/refund', [PaymentController::class, 'refund'])->middleware('throttle:60,1');
+            Route::post('payments/{payment}/refund', [PaymentController::class, 'refund'])->middleware([IdempotentRequest::class, 'throttle:60,1']);
             Route::post('payments/{payment}/cancel', [PaymentController::class, 'cancel']);
             Route::get('refunds', [PaymentController::class, 'refunds']);
 
