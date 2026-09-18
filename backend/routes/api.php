@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\V1\ActivityController;
+use App\Http\Controllers\DocsController;
 use App\Http\Controllers\Api\V1\ApiKeyController;
 use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\CouponController;
@@ -21,6 +22,10 @@ use App\Http\Middleware\AuthenticatePortal;
 use App\Http\Middleware\IdempotentRequest;
 use App\Http\Middleware\ResolveOrganization;
 use Illuminate\Support\Facades\Route;
+
+// документация лежит вне версии: одна страница на всё API
+Route::get('openapi.yaml', [DocsController::class, 'spec']);
+Route::get('docs', [DocsController::class, 'ui']);
 
 Route::prefix('v1')->group(function () {
     // провайдер стучится сюда без токена: доверие только по подписи тела

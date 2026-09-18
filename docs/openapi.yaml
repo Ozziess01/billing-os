@@ -1,0 +1,1509 @@
+openapi: 3.1.0
+info:
+  title: BillingOS API
+  version: 1.0.0
+  description: |
+    Self-hosted биллинг для SaaS: клиенты, продукты и цены, подписки, инвойсы, платежи, возвраты,
+    usage-based billing, купоны, леджер. Все суммы - целые минорные единицы валюты.
+
+    Аутентификация: `Authorization: Bearer <token>` - токен пользователя (Sanctum) или ключ организации `bos_live_…`.
+    Контекст организации для пользователя - заголовок `X-Organization` (id или slug), для ключа - организация ключа.
+    Финансовые POST принимают `Idempotency-Key`. Клиентский портал ходит с токеном `bps_…`.
+servers:
+  - url: /api/v1
+security:
+  - bearer: []
+tags:
+  - name: Auth
+  - name: Organizations
+  - name: Dashboard
+  - name: Customers
+  - name: Products
+  - name: Subscriptions
+  - name: Usage
+  - name: Coupons
+  - name: Invoices
+  - name: Payments
+  - name: Ledger
+  - name: Webhooks
+  - name: Notifications
+  - name: API keys
+  - name: Activity
+  - name: Portal
+paths:
+  /auth/register:
+    post:
+      summary: "Регистрация"
+      tags: [Auth]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [name, email, password, password_confirmation], properties: { name: { type: string }, email: { type: string }, password: { type: string, minLength: 8 }, password_confirmation: { type: string }, organization: { type: string, description: "Название первой организации" } } }
+      responses:
+        '201': { description: "Токен и организации", content: { application/json: { schema: { type: object, properties: { token: { type: string }, user: { $ref: '#/components/schemas/User' }, organizations: { type: array, items: { $ref: '#/components/schemas/Organization' } } } } } } }
+        '422': { $ref: '#/components/responses/Validation' }
+  /auth/login:
+    post:
+      summary: "Вход"
+      tags: [Auth]
+      description: "5 неудачных попыток на почту+ip - пауза 5 минут."
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [email, password], properties: { email: { type: string }, password: { type: string } } }
+      responses:
+        '200': { description: "Токен и организации" }
+        '422': { $ref: '#/components/responses/Validation' }
+  /auth/logout:
+    post:
+      summary: "Отозвать текущий токен"
+      tags: [Auth]
+      responses:
+        '204': { description: "Готово" }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /auth/me:
+    get:
+      summary: "Текущий пользователь и его организации"
+      tags: [Auth]
+      responses:
+        '200': { description: "OK" }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /organizations:
+    get:
+      summary: "Мои организации"
+      tags: [Organizations]
+      responses:
+        '200': { description: "OK", content: { application/json: { schema: { type: object, properties: { data: { type: array, items: { $ref: '#/components/schemas/Organization' } } } } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    post:
+      summary: "Создать организацию"
+      tags: [Organizations]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [name], properties: { name: { type: string }, default_currency: { type: string } } }
+      responses:
+        '201': { description: "OK", content: { application/json: { schema: { type: object, properties: { data: { $ref: '#/components/schemas/Organization' } } } } } }
+        '422': { $ref: '#/components/responses/Validation' }
+  /organizations/{organization}:
+    get:
+      summary: "Организация"
+      tags: [Organizations]
+      parameters:
+        - { name: organization, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: "OK", content: { application/json: { schema: { type: object, properties: { data: { $ref: '#/components/schemas/Organization' } } } } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    patch:
+      summary: "Переименовать / сменить валюту (admin+)"
+      tags: [Organizations]
+      parameters:
+        - { name: organization, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, properties: { name: { type: string }, default_currency: { type: string } } }
+      responses:
+        '200': { description: "OK", content: { application/json: { schema: { type: object, properties: { data: { $ref: '#/components/schemas/Organization' } } } } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/Validation' }
+  /organizations/{organization}/members:
+    get:
+      summary: "Участники"
+      tags: [Organizations]
+      parameters:
+        - { name: organization, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: "OK", content: { application/json: { schema: { type: object, properties: { data: { type: array, items: { $ref: '#/components/schemas/Member' } } } } } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      summary: "Добавить участника по почте (admin+)"
+      tags: [Organizations]
+      parameters:
+        - { name: organization, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [email, role], properties: { email: { type: string }, role: { type: string, enum: [admin, developer, viewer] } } }
+      responses:
+        '201': { description: "OK", content: { application/json: { schema: { type: object, properties: { data: { $ref: '#/components/schemas/Member' } } } } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/Validation' }
+  /organizations/{organization}/members/{member}:
+    patch:
+      summary: "Сменить роль (admin+)"
+      tags: [Organizations]
+      parameters:
+        - { name: organization, in: path, required: true, schema: { type: string } }
+        - { name: member, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [role], properties: { role: { type: string, enum: [admin, developer, viewer] } } }
+      responses:
+        '200': { description: "OK", content: { application/json: { schema: { type: object, properties: { data: { $ref: '#/components/schemas/Member' } } } } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/Validation' }
+    delete:
+      summary: "Удалить участника (admin+) или выйти самому"
+      tags: [Organizations]
+      parameters:
+        - { name: organization, in: path, required: true, schema: { type: string } }
+        - { name: member, in: path, required: true, schema: { type: string } }
+      responses:
+        '204': { description: "Готово" }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/Validation' }
+  /organizations/{organization}/transfer:
+    post:
+      summary: "Передать владение (owner)"
+      tags: [Organizations]
+      parameters:
+        - { name: organization, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [user_id], properties: { user_id: { type: integer } } }
+      responses:
+        '200': { description: "OK", content: { application/json: { schema: { type: object, properties: { data: { $ref: '#/components/schemas/Organization' } } } } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/Validation' }
+  /dashboard:
+    get:
+      summary: "Сводка: клиенты, подписки по статусам, MRR по валютам"
+      tags: [Dashboard]
+      parameters:
+        - { $ref: '#/components/parameters/organization' }
+      responses:
+        '200': { description: "OK" }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /customers:
+    get:
+      summary: "Клиенты"
+      tags: [Customers]
+      parameters:
+        - { name: q, in: query, schema: { type: string }, description: "поиск по имени, почте, external_id" }
+        - { $ref: '#/components/parameters/page' }
+        - { $ref: '#/components/parameters/perPage' }
+        - { $ref: '#/components/parameters/organization' }
+      responses:
+        '200': { description: "OK", content: { application/json: { schema: { type: object, properties: { data: { type: array, items: { $ref: '#/components/schemas/Customer' } }, meta: { $ref: '#/components/schemas/Meta' } } } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    post:
+      summary: "Создать клиента (developer+)"
+      tags: [Customers]
+      parameters:
+        - { $ref: '#/components/parameters/organization' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CustomerInput' }
+      responses:
+        '201': { description: "OK", content: { application/json: { schema: { type: object, properties: { data: { $ref: '#/components/schemas/Customer' } } } } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/Validation' }
+  /customers/{customer}:
+    get:
+      summary: "Клиент с подписками"
+      tags: [Customers]
+      parameters:
+        - { name: customer, in: path, required: true, schema: { type: string } }
+        - { $ref: '#/components/parameters/organization' }
+      responses:
+        '200': { description: "OK", content: { application/json: { schema: { type: object, properties: { data: { $ref: '#/components/schemas/Customer' } } } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      summary: "Изменить клиента (developer+)"
+      tags: [Customers]
+      parameters:
+        - { name: customer, in: path, required: true, schema: { type: string } }
+        - { $ref: '#/components/parameters/organization' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CustomerInput' }
+      responses:
+        '200': { description: "OK", content: { application/json: { schema: { type: object, properties: { data: { $ref: '#/components/schemas/Customer' } } } } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/Validation' }
+    put:
+      summary: "Изменить клиента (developer+)"
+      tags: [Customers]
+      parameters:
+        - { name: customer, in: path, required: true, schema: { type: string } }
+        - { $ref: '#/components/parameters/organization' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CustomerInput' }
+      responses:
+        '200': { description: "OK", content: { application/json: { schema: { type: object, properties: { data: { $ref: '#/components/schemas/Customer' } } } } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/Validation' }
+    delete:
+      summary: "Удалить клиента без подписок (admin+)"
+      tags: [Customers]
+      parameters:
+        - { name: customer, in: path, required: true, schema: { type: string } }
+        - { $ref: '#/components/parameters/organization' }
+      responses:
+        '204': { description: "Готово" }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/Validation' }
+  /customers/{customer}/portal-session:
+    post:
+      summary: "Ссылка в клиентский портал (developer+)"
+      tags: [Customers]
+      description: "Сессия живёт сутки, хранится только хеш токена."
+      parameters:
+        - { name: customer, in: path, required: true, schema: { type: string } }
+        - { $ref: '#/components/parameters/organization' }
+      responses:
+        '201': { description: 'Ссылка и токен показываются один раз', content: { application/json: { schema: { type: object, properties: { data: { type: object, properties: { url: { type: string }, token: { type: string }, expires_at: { type: string, format: date-time } } } } } } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /products:
+    get:
+      summary: "Продукты с ценами"
+      tags: [Products]
+      parameters:
+        - { name: active, in: query, schema: { type: boolean } }
+        - { $ref: '#/components/parameters/page' }
+        - { $ref: '#/components/parameters/perPage' }
+        - { $ref: '#/components/parameters/organization' }
+      responses:
+        '200': { description: "OK", content: { application/json: { schema: { type: object, properties: { data: { type: array, items: { $ref: '#/components/schemas/Product' } }, meta: { $ref: '#/components/schemas/Meta' } } } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    post:
+      summary: "Создать продукт (developer+)"
+      tags: [Products]
+      parameters:
+        - { $ref: '#/components/parameters/organization' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [name], properties: { name: { type: string }, description: { type: string, nullable: true }, active: { type: boolean }, metadata: { $ref: '#/components/schemas/Metadata' } } }
+      responses:
+        '201': { description: "OK", content: { application/json: { schema: { type: object, properties: { data: { $ref: '#/components/schemas/Product' } } } } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/Validation' }
+  /products/{product}:
+    get:
+      summary: "Продукт"
+      tags: [Products]
+      parameters:
+        - { name: product, in: path, required: true, schema: { type: string } }
+        - { $ref: '#/components/parameters/organization' }
+      responses:
+        '200': { description: "OK", content: { application/json: { schema: { type: object, properties: { data: { $ref: '#/components/schemas/Product' } } } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      summary: "Изменить продукт (developer+)"
+      tags: [Products]
+      parameters:
+        - { name: product, in: path, required: true, schema: { type: string } }
+        - { $ref: '#/components/parameters/organization' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, properties: { name: { type: string }, description: { type: string, nullable: true }, active: { type: boolean }, metadata: { $ref: '#/components/schemas/Metadata' } } }
+      responses:
+        '200': { description: "OK", content: { application/json: { schema: { type: object, properties: { data: { $ref: '#/components/schemas/Product' } } } } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/Validation' }
+    put:
+      summary: "Изменить продукт (developer+)"
+      tags: [Products]
+      parameters:
+        - { name: product, in: path, required: true, schema: { type: string } }
+        - { $ref: '#/components/parameters/organization' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, properties: { name: { type: string }, description: { type: string, nullable: true }, active: { type: boolean } } }
+      responses:
+        '200': { description: "OK", content: { application/json: { schema: { type: object, properties: { data: { $ref: '#/components/schemas/Product' } } } } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/Validation' }
+    delete:
+      summary: "Удалить продукт без цен (admin+)"
+      tags: [Products]
+      parameters:
+        - { name: product, in: path, required: true, schema: { type: string } }
+        - { $ref: '#/components/parameters/organization' }
+      responses:
+        '204': { description: "Готово" }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/Validation' }
+  /prices:
+    get:
+      summary: "Цены"
+      tags: [Products]
+      parameters:
+        - { name: product_id, in: query, schema: { type: string } }
+        - { name: active, in: query, schema: { type: boolean } }
+        - { $ref: '#/components/parameters/page' }
+        - { $ref: '#/components/parameters/perPage' }
+        - { $ref: '#/components/parameters/organization' }
+      responses:
+        '200': { description: "OK", content: { application/json: { schema: { type: object, properties: { data: { type: array, items: { $ref: '#/components/schemas/Price' } }, meta: { $ref: '#/components/schemas/Meta' } } } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    post:
+      summary: "Создать цену (developer+)"
+      tags: [Products]
+      description: "Сумма, валюта и интервал после создания не меняются - создайте новую цену."
+      parameters:
+        - { $ref: '#/components/parameters/organization' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PriceInput' }
+      responses:
+        '201': { description: "OK", content: { application/json: { schema: { type: object, properties: { data: { $ref: '#/components/schemas/Price' } } } } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/Validation' }
+  /prices/{price}:
+    get:
+      summary: "Цена"
+      tags: [Products]
+      parameters:
+        - { name: price, in: path, required: true, schema: { type: string } }
+        - { $ref: '#/components/parameters/organization' }
+      responses:
+        '200': { description: "OK", content: { application/json: { schema: { type: object, properties: { data: { $ref: '#/components/schemas/Price' } } } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      summary: "Название и активность цены (developer+)"
+      tags: [Products]
+      parameters:
+        - { name: price, in: path, required: true, schema: { type: string } }
+        - { $ref: '#/components/parameters/organization' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, properties: { nickname: { type: string, nullable: true }, active: { type: boolean }, metadata: { $ref: '#/components/schemas/Metadata' } } }
+      responses:
+        '200': { description: "OK", content: { application/json: { schema: { type: object, properties: { data: { $ref: '#/components/schemas/Price' } } } } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/Validation' }
+    put:
+      summary: "Название и активность цены (developer+)"
+      tags: [Products]
+      parameters:
+        - { name: price, in: path, required: true, schema: { type: string } }
+        - { $ref: '#/components/parameters/organization' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, properties: { nickname: { type: string, nullable: true }, active: { type: boolean } } }
+      responses:
+        '200': { description: "OK", content: { application/json: { schema: { type: object, properties: { data: { $ref: '#/components/schemas/Price' } } } } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/Validation' }
+    delete:
+      summary: "Удалить неиспользуемую цену (admin+)"
+      tags: [Products]
+      parameters:
+        - { name: price, in: path, required: true, schema: { type: string } }
+        - { $ref: '#/components/parameters/organization' }
+      responses:
+        '204': { description: "Готово" }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/Validation' }
+  /subscriptions:
+    get:
+      summary: "Подписки"
+      tags: [Subscriptions]
+      parameters:
+        - { name: status, in: query, schema: { type: string, enum: [trialing, active, past_due, canceled, incomplete] } }
+        - { name: customer_id, in: query, schema: { type: string } }
+        - { $ref: '#/components/parameters/page' }
+        - { $ref: '#/components/parameters/perPage' }
+        - { $ref: '#/components/parameters/organization' }
+      responses:
+        '200': { description: "OK", content: { application/json: { schema: { type: object, properties: { data: { type: array, items: { $ref: '#/components/schemas/Subscription' } }, meta: { $ref: '#/components/schemas/Meta' } } } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    post:
+      summary: "Оформить подписку (developer+)"
+      tags: [Subscriptions]
+      description: "Без триала сразу выставляется инвойс за первый период и, если у клиента есть default_payment_method, списывается: успех - active, отказ - incomplete."
+      parameters:
+        - { $ref: '#/components/parameters/organization' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SubscriptionInput' }
+      responses:
+        '201': { description: "OK", content: { application/json: { schema: { type: object, properties: { data: { $ref: '#/components/schemas/Subscription' } } } } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/Validation' }
+  /subscriptions/{subscription}:
+    get:
+      summary: "Подписка"
+      tags: [Subscriptions]
+      parameters:
+        - { name: subscription, in: path, required: true, schema: { type: string } }
+        - { $ref: '#/components/parameters/organization' }
+      responses:
+        '200': { description: "OK", content: { application/json: { schema: { type: object, properties: { data: { $ref: '#/components/schemas/Subscription' } } } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /subscriptions/{subscription}/cancel:
+    post:
+      summary: "Отменить: в конце периода (по умолчанию) или сейчас"
+      tags: [Subscriptions]
+      parameters:
+        - { name: subscription, in: path, required: true, schema: { type: string } }
+        - { $ref: '#/components/parameters/organization' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, properties: { at_period_end: { type: boolean, default: true } } }
+      responses:
+        '200': { description: "OK", content: { application/json: { schema: { type: object, properties: { data: { $ref: '#/components/schemas/Subscription' } } } } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/Validation' }
+  /subscriptions/{subscription}/resume:
+    post:
+      summary: "Снять отмену в конце периода"
+      tags: [Subscriptions]
+      parameters:
+        - { name: subscription, in: path, required: true, schema: { type: string } }
+        - { $ref: '#/components/parameters/organization' }
+      responses:
+        '200': { description: "OK", content: { application/json: { schema: { type: object, properties: { data: { $ref: '#/components/schemas/Subscription' } } } } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/Validation' }
+  /subscriptions/{subscription}/invoice:
+    post:
+      summary: "Инвойс за текущий период (один на период)"
+      tags: [Subscriptions]
+      parameters:
+        - { name: subscription, in: path, required: true, schema: { type: string } }
+        - { $ref: '#/components/parameters/organization' }
+        - { $ref: '#/components/parameters/idempotencyKey' }
+      responses:
+        '201': { description: "OK", content: { application/json: { schema: { type: object, properties: { data: { $ref: '#/components/schemas/Invoice' } } } } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/Validation' }
+  /subscriptions/{subscription}/coupon:
+    post:
+      summary: "Применить купон к подписке"
+      tags: [Subscriptions]
+      parameters:
+        - { name: subscription, in: path, required: true, schema: { type: string } }
+        - { $ref: '#/components/parameters/organization' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [coupon_code], properties: { coupon_code: { type: string } } }
+      responses:
+        '200': { description: "OK", content: { application/json: { schema: { type: object, properties: { data: { $ref: '#/components/schemas/Subscription' } } } } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/Validation' }
+  /subscriptions/{subscription}/usage:
+    get:
+      summary: "Сводка использования за текущий период"
+      tags: [Usage]
+      parameters:
+        - { name: subscription, in: path, required: true, schema: { type: string } }
+        - { $ref: '#/components/parameters/organization' }
+      responses:
+        '200': { description: "OK", content: { application/json: { schema: { type: object, properties: { data: { type: object, properties: { subscription_id: { type: string }, period_start: { type: string, format: date-time }, period_end: { type: string, format: date-time }, items: { type: array, items: { type: object, properties: { subscription_item_id: { type: string }, price_id: { type: string }, units: { type: integer }, unbilled_units: { type: integer }, estimated_amount: { type: integer } } } } } } } } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /usage:
+    get:
+      summary: "События использования"
+      tags: [Usage]
+      parameters:
+        - { name: subscription_item_id, in: query, schema: { type: string } }
+        - { name: customer_id, in: query, schema: { type: string } }
+        - { name: from, in: query, schema: { type: string, format: date-time } }
+        - { name: to, in: query, schema: { type: string, format: date-time } }
+        - { $ref: '#/components/parameters/page' }
+        - { $ref: '#/components/parameters/perPage' }
+        - { $ref: '#/components/parameters/organization' }
+      responses:
+        '200': { description: "OK", content: { application/json: { schema: { type: object, properties: { data: { type: array, items: { $ref: '#/components/schemas/UsageEvent' } }, meta: { $ref: '#/components/schemas/Meta' } } } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    post:
+      summary: "Отчёт об использовании (безопасен к повтору)"
+      tags: [Usage]
+      description: "Тот же idempotency_key в организации - то же событие. Использование выставляется при продлении за прошедший период."
+      parameters:
+        - { $ref: '#/components/parameters/organization' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [subscription_item_id, quantity], properties: { subscription_item_id: { type: string }, quantity: { type: integer, minimum: 1 }, timestamp: { type: string, format: date-time }, idempotency_key: { type: string, maxLength: 120 }, metadata: { $ref: '#/components/schemas/Metadata' } } }
+      responses:
+        '201': { description: "OK", content: { application/json: { schema: { type: object, properties: { data: { $ref: '#/components/schemas/UsageEvent' } } } } } }
+        '200': { description: 'Событие с таким idempotency_key уже есть - возвращено оно', content: { application/json: { schema: { type: object, properties: { data: { $ref: '#/components/schemas/UsageEvent' } } } } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/Validation' }
+  /coupons:
+    get:
+      summary: "Купоны"
+      tags: [Coupons]
+      parameters:
+        - { name: active, in: query, schema: { type: boolean } }
+        - { $ref: '#/components/parameters/page' }
+        - { $ref: '#/components/parameters/perPage' }
+        - { $ref: '#/components/parameters/organization' }
+      responses:
+        '200': { description: "OK", content: { application/json: { schema: { type: object, properties: { data: { type: array, items: { $ref: '#/components/schemas/Coupon' } }, meta: { $ref: '#/components/schemas/Meta' } } } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    post:
+      summary: "Создать купон (admin+)"
+      tags: [Coupons]
+      parameters:
+        - { $ref: '#/components/parameters/organization' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [code, name, type], properties: { code: { type: string, pattern: '^[A-Za-z0-9_-]+$' }, name: { type: string }, type: { type: string, enum: [percent, fixed] }, percent_off: { type: integer, minimum: 1, maximum: 100 }, amount_off: { type: integer, minimum: 1 }, currency: { type: string }, duration: { type: string, enum: [once, forever], default: forever }, redeem_by: { type: string, format: date-time, nullable: true }, max_redemptions: { type: integer, nullable: true }, customer_id: { type: string, nullable: true }, metadata: { $ref: '#/components/schemas/Metadata' } } }
+      responses:
+        '201': { description: "OK", content: { application/json: { schema: { type: object, properties: { data: { $ref: '#/components/schemas/Coupon' } } } } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/Validation' }
+  /coupons/{coupon}:
+    get:
+      summary: "Купон"
+      tags: [Coupons]
+      parameters:
+        - { name: coupon, in: path, required: true, schema: { type: string } }
+        - { $ref: '#/components/parameters/organization' }
+      responses:
+        '200': { description: "OK", content: { application/json: { schema: { type: object, properties: { data: { $ref: '#/components/schemas/Coupon' } } } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      summary: "Имя и выключатель купона (admin+)"
+      tags: [Coupons]
+      parameters:
+        - { name: coupon, in: path, required: true, schema: { type: string } }
+        - { $ref: '#/components/parameters/organization' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, properties: { name: { type: string }, active: { type: boolean } } }
+      responses:
+        '200': { description: "OK", content: { application/json: { schema: { type: object, properties: { data: { $ref: '#/components/schemas/Coupon' } } } } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/Validation' }
+  /invoices:
+    get:
+      summary: "Инвойсы"
+      tags: [Invoices]
+      parameters:
+        - { name: status, in: query, schema: { type: string, enum: [draft, open, paid, void, uncollectible] } }
+        - { name: customer_id, in: query, schema: { type: string } }
+        - { name: subscription_id, in: query, schema: { type: string } }
+        - { $ref: '#/components/parameters/page' }
+        - { $ref: '#/components/parameters/perPage' }
+        - { $ref: '#/components/parameters/organization' }
+      responses:
+        '200': { description: "OK", content: { application/json: { schema: { type: object, properties: { data: { type: array, items: { $ref: '#/components/schemas/Invoice' } }, meta: { $ref: '#/components/schemas/Meta' } } } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    post:
+      summary: "Черновик инвойса (developer+)"
+      tags: [Invoices]
+      parameters:
+        - { $ref: '#/components/parameters/organization' }
+        - { $ref: '#/components/parameters/idempotencyKey' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [customer_id], properties: { customer_id: { type: string }, currency: { type: string }, description: { type: string, nullable: true }, items: { type: array, items: { $ref: '#/components/schemas/InvoiceItemInput' } }, metadata: { $ref: '#/components/schemas/Metadata' } } }
+      responses:
+        '201': { description: "OK", content: { application/json: { schema: { type: object, properties: { data: { $ref: '#/components/schemas/Invoice' } } } } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/Validation' }
+  /invoices/{invoice}:
+    get:
+      summary: "Инвойс с позициями и платежами"
+      tags: [Invoices]
+      parameters:
+        - { name: invoice, in: path, required: true, schema: { type: string } }
+        - { $ref: '#/components/parameters/organization' }
+      responses:
+        '200': { description: "OK", content: { application/json: { schema: { type: object, properties: { data: { $ref: '#/components/schemas/Invoice' } } } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      summary: "Удалить черновик (admin+)"
+      tags: [Invoices]
+      parameters:
+        - { name: invoice, in: path, required: true, schema: { type: string } }
+        - { $ref: '#/components/parameters/organization' }
+      responses:
+        '204': { description: "Готово" }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/Validation' }
+  /invoices/{invoice}/items:
+    post:
+      summary: "Добавить позицию в черновик"
+      tags: [Invoices]
+      parameters:
+        - { name: invoice, in: path, required: true, schema: { type: string } }
+        - { $ref: '#/components/parameters/organization' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/InvoiceItemInput' }
+      responses:
+        '200': { description: "OK", content: { application/json: { schema: { type: object, properties: { data: { $ref: '#/components/schemas/Invoice' } } } } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/Validation' }
+  /invoices/{invoice}/items/{item}:
+    delete:
+      summary: "Убрать позицию из черновика"
+      tags: [Invoices]
+      parameters:
+        - { name: invoice, in: path, required: true, schema: { type: string } }
+        - { name: item, in: path, required: true, schema: { type: string } }
+        - { $ref: '#/components/parameters/organization' }
+      responses:
+        '200': { description: "OK", content: { application/json: { schema: { type: object, properties: { data: { $ref: '#/components/schemas/Invoice' } } } } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/Validation' }
+  /invoices/{invoice}/finalize:
+    post:
+      summary: "Финализировать: номер, срок оплаты, заморозка, проводка"
+      tags: [Invoices]
+      description: "Нулевой инвойс сразу становится paid."
+      parameters:
+        - { name: invoice, in: path, required: true, schema: { type: string } }
+        - { $ref: '#/components/parameters/organization' }
+        - { $ref: '#/components/parameters/idempotencyKey' }
+      responses:
+        '200': { description: "OK", content: { application/json: { schema: { type: object, properties: { data: { $ref: '#/components/schemas/Invoice' } } } } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/Validation' }
+  /invoices/{invoice}/void:
+    post:
+      summary: "Аннулировать открытый инвойс (admin+)"
+      tags: [Invoices]
+      parameters:
+        - { name: invoice, in: path, required: true, schema: { type: string } }
+        - { $ref: '#/components/parameters/organization' }
+      responses:
+        '200': { description: "OK", content: { application/json: { schema: { type: object, properties: { data: { $ref: '#/components/schemas/Invoice' } } } } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Validation' }
+  /invoices/{invoice}/uncollectible:
+    post:
+      summary: "Признать безнадёжным (admin+)"
+      tags: [Invoices]
+      parameters:
+        - { name: invoice, in: path, required: true, schema: { type: string } }
+        - { $ref: '#/components/parameters/organization' }
+      responses:
+        '200': { description: "OK", content: { application/json: { schema: { type: object, properties: { data: { $ref: '#/components/schemas/Invoice' } } } } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Validation' }
+  /payments:
+    get:
+      summary: "Платежи"
+      tags: [Payments]
+      parameters:
+        - { name: status, in: query, schema: { type: string, enum: [pending, processing, succeeded, failed, canceled] } }
+        - { name: invoice_id, in: query, schema: { type: string } }
+        - { name: customer_id, in: query, schema: { type: string } }
+        - { $ref: '#/components/parameters/page' }
+        - { $ref: '#/components/parameters/perPage' }
+        - { $ref: '#/components/parameters/organization' }
+      responses:
+        '200': { description: "OK", content: { application/json: { schema: { type: object, properties: { data: { type: array, items: { $ref: '#/components/schemas/Payment' } }, meta: { $ref: '#/components/schemas/Meta' } } } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    post:
+      summary: "Оплатить открытый инвойс"
+      tags: [Payments]
+      description: "Создаётся попытка платежа. Результат может быть терминальным сразу (succeeded/failed) или прийти вебхуком (processing). Один инвойс - один платёж в полёте: параллельный запрос получит 409."
+      parameters:
+        - { $ref: '#/components/parameters/organization' }
+        - { $ref: '#/components/parameters/idempotencyKey' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [invoice_id, payment_method], properties: { invoice_id: { type: string }, payment_method: { type: string, description: 'Токен у провайдера; у fake: tok_ok, tok_fail, tok_insufficient, tok_async, tok_action, tok_ok_norefund, tok_error' } } }
+      responses:
+        '201': { description: "OK", content: { application/json: { schema: { type: object, properties: { data: { $ref: '#/components/schemas/Payment' } } } } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Validation' }
+  /payments/{payment}:
+    get:
+      summary: "Платёж с возвратами"
+      tags: [Payments]
+      parameters:
+        - { name: payment, in: path, required: true, schema: { type: string } }
+        - { $ref: '#/components/parameters/organization' }
+      responses:
+        '200': { description: "OK", content: { application/json: { schema: { type: object, properties: { data: { $ref: '#/components/schemas/Payment' } } } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /payments/{payment}/refund:
+    post:
+      summary: "Возврат (admin+)"
+      tags: [Payments]
+      description: "Сумма возвратов не превысит списанное; оригинальный платёж не меняется."
+      parameters:
+        - { name: payment, in: path, required: true, schema: { type: string } }
+        - { $ref: '#/components/parameters/organization' }
+        - { $ref: '#/components/parameters/idempotencyKey' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, properties: { amount: { type: integer, minimum: 1, description: 'Минорные единицы; пусто - весь остаток' }, reason: { type: string, nullable: true } } }
+      responses:
+        '201': { description: "OK", content: { application/json: { schema: { type: object, properties: { data: { $ref: '#/components/schemas/Refund' } } } } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/Validation' }
+  /payments/{payment}/cancel:
+    post:
+      summary: "Отменить платёж в обработке"
+      tags: [Payments]
+      parameters:
+        - { name: payment, in: path, required: true, schema: { type: string } }
+        - { $ref: '#/components/parameters/organization' }
+      responses:
+        '200': { description: "OK", content: { application/json: { schema: { type: object, properties: { data: { $ref: '#/components/schemas/Payment' } } } } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/Validation' }
+  /refunds:
+    get:
+      summary: "Возвраты"
+      tags: [Payments]
+      parameters:
+        - { name: payment_id, in: query, schema: { type: string } }
+        - { $ref: '#/components/parameters/page' }
+        - { $ref: '#/components/parameters/perPage' }
+        - { $ref: '#/components/parameters/organization' }
+      responses:
+        '200': { description: "OK", content: { application/json: { schema: { type: object, properties: { data: { type: array, items: { $ref: '#/components/schemas/Refund' } }, meta: { $ref: '#/components/schemas/Meta' } } } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /providers/fake/payments/{providerPaymentId}/confirm:
+    post:
+      summary: "Fake-провайдер: подтвердить платёж requires_action (аналог 3-D Secure)"
+      tags: [Payments]
+      parameters:
+        - { name: providerPaymentId, in: path, required: true, schema: { type: string } }
+        - { $ref: '#/components/parameters/organization' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, properties: { success: { type: boolean, default: true } } }
+      responses:
+        '200': { description: "Провайдер отправит вебхук" }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /ledger/accounts:
+    get:
+      summary: "Счета леджера с балансами"
+      tags: [Ledger]
+      parameters:
+        - { $ref: '#/components/parameters/organization' }
+      responses:
+        '200': { description: "OK", content: { application/json: { schema: { type: object, properties: { data: { type: array, items: { $ref: '#/components/schemas/LedgerAccount' } } } } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /ledger/transactions:
+    get:
+      summary: "Проводки"
+      tags: [Ledger]
+      parameters:
+        - { name: type, in: query, schema: { type: string, enum: [invoice, payment, refund, adjustment] } }
+        - { name: reference_id, in: query, schema: { type: string } }
+        - { name: currency, in: query, schema: { type: string } }
+        - { $ref: '#/components/parameters/page' }
+        - { $ref: '#/components/parameters/perPage' }
+        - { $ref: '#/components/parameters/organization' }
+      responses:
+        '200': { description: "OK", content: { application/json: { schema: { type: object, properties: { data: { type: array, items: { $ref: '#/components/schemas/LedgerTransaction' } }, meta: { $ref: '#/components/schemas/Meta' } } } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /webhooks/{provider}:
+    post:
+      summary: "Приём вебхука провайдера"
+      tags: [Webhooks]
+      security: []
+      parameters:
+        - { name: provider, in: path, required: true, schema: { type: string }, description: "fake" }
+        - { name: Fake-Signature, in: header, required: true, schema: { type: string }, description: 't=<unix>,v1=<hmac_sha256(secret, "t.body")>' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [id, type, account, data], properties: { id: { type: string }, type: { type: string, example: payment.succeeded }, account: { type: integer, description: "id организации" }, created: { type: integer }, data: { type: object } } }
+      responses:
+        '202': { description: "Принято, обработка в очереди" }
+        '200': { description: "Дубликат события, уже есть" }
+        '400': { description: "Подпись не сошлась, timestamp протух или аккаунт неизвестен" }
+        '404': { description: "Неизвестный провайдер" }
+  /webhooks/events:
+    get:
+      summary: "Принятые события (developer+)"
+      tags: [Webhooks]
+      parameters:
+        - { $ref: '#/components/parameters/page' }
+        - { $ref: '#/components/parameters/perPage' }
+        - { $ref: '#/components/parameters/organization' }
+      responses:
+        '200': { description: "OK", content: { application/json: { schema: { type: object, properties: { data: { type: array, items: { $ref: '#/components/schemas/WebhookEvent' } }, meta: { $ref: '#/components/schemas/Meta' } } } } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /notifications:
+    get:
+      summary: "Мои уведомления в организации"
+      tags: [Notifications]
+      parameters:
+        - { $ref: '#/components/parameters/page' }
+        - { $ref: '#/components/parameters/perPage' }
+        - { $ref: '#/components/parameters/organization' }
+      responses:
+        '200': { description: "OK", content: { application/json: { schema: { type: object, properties: { data: { type: array, items: { $ref: '#/components/schemas/Notification' } }, meta: { type: object, properties: { current_page: { type: integer }, last_page: { type: integer }, total: { type: integer }, unread: { type: integer } } } } } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /notifications/{id}/read:
+    post:
+      summary: "Отметить прочитанным"
+      tags: [Notifications]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { $ref: '#/components/parameters/organization' }
+      responses:
+        '200': { description: "OK" }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /notifications/read-all:
+    post:
+      summary: "Прочитать все"
+      tags: [Notifications]
+      parameters:
+        - { $ref: '#/components/parameters/organization' }
+      responses:
+        '204': { description: "Готово" }
+  /notifications/preferences:
+    get:
+      summary: "Каналы по событиям"
+      tags: [Notifications]
+      parameters:
+        - { $ref: '#/components/parameters/organization' }
+      responses:
+        '200': { description: "OK", content: { application/json: { schema: { type: object, properties: { data: { type: array, items: { $ref: '#/components/schemas/NotificationPreference' } } } } } } }
+    patch:
+      summary: "Обновить каналы"
+      tags: [Notifications]
+      parameters:
+        - { $ref: '#/components/parameters/organization' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [preferences], properties: { preferences: { type: array, items: { type: object, required: [event, in_app, mail], properties: { event: { type: string }, in_app: { type: boolean }, mail: { type: boolean } } } } } }
+      responses:
+        '200': { description: "OK", content: { application/json: { schema: { type: object, properties: { data: { type: array, items: { $ref: '#/components/schemas/NotificationPreference' } } } } } } }
+        '422': { $ref: '#/components/responses/Validation' }
+  /api-keys:
+    get:
+      summary: "Ключи организации (admin+)"
+      tags: [API keys]
+      parameters:
+        - { $ref: '#/components/parameters/organization' }
+      responses:
+        '200': { description: "OK", content: { application/json: { schema: { type: object, properties: { data: { type: array, items: { $ref: '#/components/schemas/ApiKey' } } } } } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      summary: "Выпустить ключ (admin+); plain_key показывается один раз"
+      tags: [API keys]
+      parameters:
+        - { $ref: '#/components/parameters/organization' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [name], properties: { name: { type: string }, expires_at: { type: string, format: date-time, nullable: true } } }
+      responses:
+        '201': { description: "OK", content: { application/json: { schema: { type: object, properties: { data: { $ref: '#/components/schemas/ApiKey' }, plain_key: { type: string, example: bos_live_… } } } } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/Validation' }
+  /api-keys/{key}:
+    delete:
+      summary: "Отозвать ключ (admin+)"
+      tags: [API keys]
+      parameters:
+        - { name: key, in: path, required: true, schema: { type: string } }
+        - { $ref: '#/components/parameters/organization' }
+      responses:
+        '204': { description: "Готово" }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /activity:
+    get:
+      summary: "Журнал действий (admin+), append-only"
+      tags: [Activity]
+      parameters:
+        - { name: action, in: query, schema: { type: string }, description: "префикс, например payment" }
+        - { name: resource_type, in: query, schema: { type: string } }
+        - { name: resource_id, in: query, schema: { type: string } }
+        - { $ref: '#/components/parameters/page' }
+        - { $ref: '#/components/parameters/perPage' }
+        - { $ref: '#/components/parameters/organization' }
+      responses:
+        '200': { description: "OK", content: { application/json: { schema: { type: object, properties: { data: { type: array, items: { $ref: '#/components/schemas/ActivityLog' } }, meta: { $ref: '#/components/schemas/Meta' } } } } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /portal/session:
+    get:
+      summary: "Клиент, организация и срок сессии"
+      tags: [Portal]
+      security: [{ portal: [] }]
+      responses:
+        '200': { description: "OK" }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /portal/billing:
+    patch:
+      summary: "Реквизиты и способ оплаты"
+      tags: [Portal]
+      security: [{ portal: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, properties: { name: { type: string }, email: { type: string, nullable: true }, default_payment_method: { type: string, nullable: true } } }
+      responses:
+        '200': { description: "OK", content: { application/json: { schema: { type: object, properties: { data: { $ref: '#/components/schemas/Customer' } } } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '422': { $ref: '#/components/responses/Validation' }
+  /portal/subscriptions:
+    get:
+      summary: "Подписки клиента"
+      tags: [Portal]
+      security: [{ portal: [] }]
+      responses:
+        '200': { description: "OK", content: { application/json: { schema: { type: object, properties: { data: { type: array, items: { $ref: '#/components/schemas/Subscription' } } } } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /portal/subscriptions/{id}/cancel:
+    post:
+      summary: "Отменить подписку"
+      tags: [Portal]
+      security: [{ portal: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, properties: { at_period_end: { type: boolean, default: true } } }
+      responses:
+        '200': { description: "OK", content: { application/json: { schema: { type: object, properties: { data: { $ref: '#/components/schemas/Subscription' } } } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/Validation' }
+  /portal/invoices:
+    get:
+      summary: "Инвойсы клиента (кроме черновиков)"
+      tags: [Portal]
+      security: [{ portal: [] }]
+      responses:
+        '200': { description: "OK", content: { application/json: { schema: { type: object, properties: { data: { type: array, items: { $ref: '#/components/schemas/Invoice' } } } } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /portal/invoices/{id}:
+    get:
+      summary: "Инвойс"
+      tags: [Portal]
+      security: [{ portal: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: "OK", content: { application/json: { schema: { type: object, properties: { data: { $ref: '#/components/schemas/Invoice' } } } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /portal/invoices/{id}/export:
+    get:
+      summary: "Выгрузка инвойса"
+      tags: [Portal]
+      security: [{ portal: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: format, in: query, schema: { type: string, enum: [json, csv], default: json } }
+      responses:
+        '200': { description: "Файл JSON или CSV (Content-Disposition attachment)" }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /portal/invoices/{id}/pay:
+    post:
+      summary: "Оплатить инвойс"
+      tags: [Portal]
+      security: [{ portal: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [payment_method], properties: { payment_method: { type: string } } }
+      responses:
+        '201': { description: "OK", content: { application/json: { schema: { type: object, properties: { data: { $ref: '#/components/schemas/Payment' } } } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Validation' }
+  /portal/payments:
+    get:
+      summary: "История платежей клиента"
+      tags: [Portal]
+      security: [{ portal: [] }]
+      responses:
+        '200': { description: "OK", content: { application/json: { schema: { type: object, properties: { data: { type: array, items: { $ref: '#/components/schemas/Payment' } } } } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+components:
+  securitySchemes:
+    bearer:
+      type: http
+      scheme: bearer
+      description: "Токен пользователя (Sanctum) или ключ организации `bos_live_…`. Для ключа организация определяется автоматически, права - developer."
+    portal:
+      type: http
+      scheme: bearer
+      description: Токен сессии клиентского портала `bps_…` из ссылки, выданной `POST /customers/{id}/portal-session`.
+  parameters:
+    organization:
+      name: X-Organization
+      in: header
+      required: false
+      description: id или slug организации. Не нужен, если пользователь состоит ровно в одной, и игнорируется для API-ключа.
+      schema: { type: string }
+    idempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: false
+      description: "Ключ идемпотентности (до 120 символов). Повтор того же запроса отдаёт сохранённый ответ с `Idempotent-Replayed: true`; тот же ключ с другим телом - 409."
+      schema: { type: string }
+    page:
+      name: page
+      in: query
+      schema: { type: integer, minimum: 1 }
+    perPage:
+      name: per_page
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 100 }
+  responses:
+    Unauthorized: { description: "Нет или недействителен токен" }
+    Forbidden: { description: "Недостаточно прав в организации" }
+    NotFound: { description: "Ресурс не найден или принадлежит другой организации" }
+    Validation:
+      description: Ошибка валидации
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ValidationError' }
+    Conflict:
+      description: Нарушение доменного правила (недопустимый переход состояния, второй платёж в полёте, повтор Idempotency-Key с другим телом)
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+  schemas:
+    Error:
+      type: object
+      properties: { message: { type: string } }
+    ValidationError:
+      type: object
+      properties:
+        message: { type: string }
+        errors: { type: object, additionalProperties: { type: array, items: { type: string } } }
+    Money:
+      type: object
+      description: Сумма в минорных единицах валюты. Никаких float.
+      properties:
+        amount: { type: integer, example: 1999 }
+        currency: { type: string, example: EUR }
+        formatted: { type: string, example: 19.99 EUR }
+    Metadata:
+      type: object
+      description: До 50 ключей, плоские скалярные значения
+      additionalProperties: { oneOf: [{ type: string }, { type: number }, { type: boolean }, { type: 'null' }] }
+    Meta:
+      type: object
+      properties:
+        current_page: { type: integer }
+        last_page: { type: integer }
+        per_page: { type: integer }
+        total: { type: integer }
+    User:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        email: { type: string, format: email }
+        created_at: { type: string, format: date-time }
+    Organization:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        slug: { type: string }
+        default_currency: { type: string }
+        owner_id: { type: integer }
+        role: { type: string, enum: [owner, admin, developer, viewer] }
+        members_count: { type: integer }
+        created_at: { type: string, format: date-time }
+    Member:
+      type: object
+      properties:
+        id: { type: integer }
+        user_id: { type: integer }
+        name: { type: string }
+        email: { type: string }
+        role: { type: string, enum: [owner, admin, developer, viewer] }
+        joined_at: { type: string, format: date-time }
+    Customer:
+      type: object
+      properties:
+        id: { type: string, minLength: 26, maxLength: 26, example: 01j9x8b6d1v3y7z2q4w5e6r7t8 }
+        external_id: { type: string, nullable: true }
+        name: { type: string }
+        email: { type: string, nullable: true }
+        description: { type: string, nullable: true }
+        default_payment_method: { type: string, nullable: true, description: "Платёжный метод у провайдера для автосписания" }
+        metadata: { $ref: '#/components/schemas/Metadata' }
+        subscriptions_count: { type: integer }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    CustomerInput:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string, maxLength: 200 }
+        email: { type: string, nullable: true }
+        external_id: { type: string, nullable: true, maxLength: 120 }
+        description: { type: string, nullable: true }
+        default_payment_method: { type: string, nullable: true }
+        metadata: { $ref: '#/components/schemas/Metadata' }
+    Product:
+      type: object
+      properties:
+        id: { type: string, minLength: 26, maxLength: 26, example: 01j9x8b6d1v3y7z2q4w5e6r7t8 }
+        name: { type: string }
+        description: { type: string, nullable: true }
+        active: { type: boolean }
+        metadata: { $ref: '#/components/schemas/Metadata' }
+        prices: { type: array, items: { $ref: '#/components/schemas/Price' } }
+        created_at: { type: string, format: date-time }
+    Price:
+      type: object
+      description: Сумма, валюта и интервал после создания неизменяемы.
+      properties:
+        id: { type: string, minLength: 26, maxLength: 26, example: 01j9x8b6d1v3y7z2q4w5e6r7t8 }
+        product_id: { type: string, minLength: 26, maxLength: 26, example: 01j9x8b6d1v3y7z2q4w5e6r7t8 }
+        nickname: { type: string, nullable: true }
+        currency: { type: string }
+        unit_amount: { type: integer, description: "Минорные единицы за период × количество (licensed)" }
+        unit_amount_formatted: { type: string }
+        usage_type: { type: string, enum: [licensed, metered] }
+        unit_amount_decimal: { type: string, nullable: true, description: 'Цена за единицу использования в минорных единицах с дробью (metered): "0.1" = €0.001' }
+        billing_interval: { type: string, enum: [day, week, month, year] }
+        interval_count: { type: integer }
+        active: { type: boolean }
+        metadata: { $ref: '#/components/schemas/Metadata' }
+        created_at: { type: string, format: date-time }
+    PriceInput:
+      type: object
+      required: [product_id, currency, billing_interval]
+      properties:
+        product_id: { type: string, minLength: 26, maxLength: 26, example: 01j9x8b6d1v3y7z2q4w5e6r7t8 }
+        nickname: { type: string, nullable: true }
+        currency: { type: string, example: EUR }
+        unit_amount: { type: integer, minimum: 0, description: "Обязателен для licensed" }
+        usage_type: { type: string, enum: [licensed, metered], default: licensed }
+        unit_amount_decimal: { type: string, description: "Обязателен для metered" }
+        billing_interval: { type: string, enum: [day, week, month, year] }
+        interval_count: { type: integer, minimum: 1, maximum: 365, default: 1 }
+        active: { type: boolean }
+        metadata: { $ref: '#/components/schemas/Metadata' }
+    SubscriptionItem:
+      type: object
+      properties:
+        id: { type: string, minLength: 26, maxLength: 26, example: 01j9x8b6d1v3y7z2q4w5e6r7t8 }
+        price_id: { type: string, minLength: 26, maxLength: 26, example: 01j9x8b6d1v3y7z2q4w5e6r7t8 }
+        price: { $ref: '#/components/schemas/Price' }
+        quantity: { type: integer }
+        usage_type: { type: string, enum: [licensed, metered] }
+        amount: { $ref: '#/components/schemas/Money' }
+    Subscription:
+      type: object
+      properties:
+        id: { type: string, minLength: 26, maxLength: 26, example: 01j9x8b6d1v3y7z2q4w5e6r7t8 }
+        customer_id: { type: string, minLength: 26, maxLength: 26, example: 01j9x8b6d1v3y7z2q4w5e6r7t8 }
+        customer: { $ref: '#/components/schemas/Customer' }
+        status: { type: string, enum: [trialing, active, past_due, canceled, incomplete] }
+        currency: { type: string }
+        period_amount: { $ref: '#/components/schemas/Money' }
+        trial_ends_at: { type: string, format: date-time, nullable: true }
+        current_period_start: { type: string, format: date-time }
+        current_period_end: { type: string, format: date-time }
+        cancel_at_period_end: { type: boolean }
+        canceled_at: { type: string, format: date-time, nullable: true }
+        cancel_reason: { type: string, nullable: true, enum: [requested, period_end, payment_failed, portal, null] }
+        ended_at: { type: string, format: date-time, nullable: true }
+        coupon: { $ref: '#/components/schemas/Coupon' }
+        items: { type: array, items: { $ref: '#/components/schemas/SubscriptionItem' } }
+        metadata: { $ref: '#/components/schemas/Metadata' }
+        created_at: { type: string, format: date-time }
+    SubscriptionInput:
+      type: object
+      required: [customer_id, items]
+      properties:
+        customer_id: { type: string, minLength: 26, maxLength: 26, example: 01j9x8b6d1v3y7z2q4w5e6r7t8 }
+        items:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            required: [price_id]
+            properties:
+              price_id: { type: string, minLength: 26, maxLength: 26, example: 01j9x8b6d1v3y7z2q4w5e6r7t8 }
+              quantity: { type: integer, minimum: 1, default: 1 }
+        trial_days: { type: integer, minimum: 0, maximum: 365, default: 0 }
+        starts_at: { type: string, format: date-time }
+        coupon_code: { type: string }
+        metadata: { $ref: '#/components/schemas/Metadata' }
+    InvoiceItem:
+      type: object
+      properties:
+        id: { type: string, minLength: 26, maxLength: 26, example: 01j9x8b6d1v3y7z2q4w5e6r7t8 }
+        price_id: { type: string, nullable: true }
+        description: { type: string }
+        quantity: { type: integer }
+        unit_amount: { $ref: '#/components/schemas/Money' }
+        amount: { $ref: '#/components/schemas/Money' }
+        period_start: { type: string, format: date-time, nullable: true }
+        period_end: { type: string, format: date-time, nullable: true }
+    InvoiceItemInput:
+      type: object
+      description: Либо price_id (сумма из цены), либо description + unit_amount
+      properties:
+        price_id: { type: string, nullable: true }
+        description: { type: string, nullable: true }
+        quantity: { type: integer, minimum: 1, default: 1 }
+        unit_amount: { type: integer, minimum: 0, nullable: true }
+    Invoice:
+      type: object
+      properties:
+        id: { type: string, minLength: 26, maxLength: 26, example: 01j9x8b6d1v3y7z2q4w5e6r7t8 }
+        number: { type: string, nullable: true, example: INV-000042, description: "Выдаётся при финализации" }
+        status: { type: string, enum: [draft, open, paid, void, uncollectible] }
+        customer_id: { type: string, minLength: 26, maxLength: 26, example: 01j9x8b6d1v3y7z2q4w5e6r7t8 }
+        customer: { $ref: '#/components/schemas/Customer' }
+        subscription_id: { type: string, nullable: true }
+        currency: { type: string }
+        subtotal: { $ref: '#/components/schemas/Money' }
+        discount: { $ref: '#/components/schemas/Money' }
+        total: { $ref: '#/components/schemas/Money' }
+        amount_paid: { $ref: '#/components/schemas/Money' }
+        amount_due: { $ref: '#/components/schemas/Money' }
+        description: { type: string, nullable: true }
+        coupon_id: { type: string, nullable: true }
+        auto_collect: { type: boolean }
+        collection_attempts: { type: integer }
+        next_payment_attempt_at: { type: string, format: date-time, nullable: true }
+        period_start: { type: string, format: date-time, nullable: true }
+        period_end: { type: string, format: date-time, nullable: true }
+        due_at: { type: string, format: date-time, nullable: true }
+        finalized_at: { type: string, format: date-time, nullable: true }
+        paid_at: { type: string, format: date-time, nullable: true }
+        voided_at: { type: string, format: date-time, nullable: true }
+        uncollectible_at: { type: string, format: date-time, nullable: true }
+        items: { type: array, items: { $ref: '#/components/schemas/InvoiceItem' } }
+        payments: { type: array, items: { $ref: '#/components/schemas/Payment' } }
+        metadata: { $ref: '#/components/schemas/Metadata' }
+        created_at: { type: string, format: date-time }
+    Payment:
+      type: object
+      properties:
+        id: { type: string, minLength: 26, maxLength: 26, example: 01j9x8b6d1v3y7z2q4w5e6r7t8 }
+        invoice_id: { type: string, minLength: 26, maxLength: 26, example: 01j9x8b6d1v3y7z2q4w5e6r7t8 }
+        invoice: { $ref: '#/components/schemas/Invoice' }
+        customer_id: { type: string, minLength: 26, maxLength: 26, example: 01j9x8b6d1v3y7z2q4w5e6r7t8 }
+        attempt_number: { type: integer }
+        status: { type: string, enum: [pending, processing, succeeded, failed, canceled] }
+        amount: { $ref: '#/components/schemas/Money' }
+        amount_refunded: { $ref: '#/components/schemas/Money' }
+        refundable_amount: { $ref: '#/components/schemas/Money' }
+        provider: { type: string, example: fake }
+        provider_payment_id: { type: string, nullable: true }
+        payment_method: { type: string }
+        failure_code: { type: string, nullable: true }
+        failure_message: { type: string, nullable: true }
+        next_action: { type: object, nullable: true, description: 'Для requires_action: { type: confirm, provider_payment_id }' }
+        refunds: { type: array, items: { $ref: '#/components/schemas/Refund' } }
+        succeeded_at: { type: string, format: date-time, nullable: true }
+        failed_at: { type: string, format: date-time, nullable: true }
+        canceled_at: { type: string, format: date-time, nullable: true }
+        created_at: { type: string, format: date-time }
+    Refund:
+      type: object
+      properties:
+        id: { type: string, minLength: 26, maxLength: 26, example: 01j9x8b6d1v3y7z2q4w5e6r7t8 }
+        payment_id: { type: string, minLength: 26, maxLength: 26, example: 01j9x8b6d1v3y7z2q4w5e6r7t8 }
+        status: { type: string, enum: [pending, succeeded, failed] }
+        amount: { $ref: '#/components/schemas/Money' }
+        reason: { type: string, nullable: true }
+        provider_refund_id: { type: string, nullable: true }
+        failure_message: { type: string, nullable: true }
+        succeeded_at: { type: string, format: date-time, nullable: true }
+        created_at: { type: string, format: date-time }
+    Coupon:
+      type: object
+      properties:
+        id: { type: string, minLength: 26, maxLength: 26, example: 01j9x8b6d1v3y7z2q4w5e6r7t8 }
+        code: { type: string, example: SAVE20 }
+        name: { type: string }
+        type: { type: string, enum: [percent, fixed] }
+        percent_off: { type: integer, nullable: true }
+        amount_off: { $ref: '#/components/schemas/Money' }
+        currency: { type: string, nullable: true }
+        duration: { type: string, enum: [once, forever] }
+        redeem_by: { type: string, format: date-time, nullable: true }
+        max_redemptions: { type: integer, nullable: true }
+        times_redeemed: { type: integer }
+        customer_id: { type: string, nullable: true }
+        active: { type: boolean }
+        valid: { type: boolean, description: "Активен, не истёк и не исчерпан" }
+        created_at: { type: string, format: date-time }
+    UsageEvent:
+      type: object
+      properties:
+        id: { type: string, minLength: 26, maxLength: 26, example: 01j9x8b6d1v3y7z2q4w5e6r7t8 }
+        subscription_item_id: { type: string, minLength: 26, maxLength: 26, example: 01j9x8b6d1v3y7z2q4w5e6r7t8 }
+        customer_id: { type: string, minLength: 26, maxLength: 26, example: 01j9x8b6d1v3y7z2q4w5e6r7t8 }
+        quantity: { type: integer }
+        timestamp: { type: string, format: date-time }
+        idempotency_key: { type: string, nullable: true }
+        invoice_item_id: { type: string, nullable: true, description: "Заполняется, когда использование выставлено в инвойс" }
+        created_at: { type: string, format: date-time }
+    LedgerAccount:
+      type: object
+      properties:
+        id: { type: string, minLength: 26, maxLength: 26, example: 01j9x8b6d1v3y7z2q4w5e6r7t8 }
+        type: { type: string, enum: [cash, receivable, revenue, adjustments] }
+        name: { type: string }
+        currency: { type: string }
+        balance: { $ref: '#/components/schemas/Money' }
+    LedgerTransaction:
+      type: object
+      properties:
+        id: { type: string, minLength: 26, maxLength: 26, example: 01j9x8b6d1v3y7z2q4w5e6r7t8 }
+        type: { type: string, enum: [invoice, payment, refund, adjustment] }
+        description: { type: string }
+        amount: { $ref: '#/components/schemas/Money' }
+        reference_type: { type: string }
+        reference_id: { type: string }
+        posted_at: { type: string, format: date-time }
+        entries:
+          type: array
+          items:
+            type: object
+            properties:
+              account_id: { type: string }
+              account_type: { type: string }
+              account_name: { type: string }
+              debit: { $ref: '#/components/schemas/Money' }
+              credit: { $ref: '#/components/schemas/Money' }
+    WebhookEvent:
+      type: object
+      properties:
+        id: { type: string, minLength: 26, maxLength: 26, example: 01j9x8b6d1v3y7z2q4w5e6r7t8 }
+        provider: { type: string }
+        event_id: { type: string }
+        type: { type: string }
+        status: { type: string, enum: [received, processing, processed, ignored, failed] }
+        attempts: { type: integer }
+        error: { type: string, nullable: true }
+        payload: { type: object }
+        processed_at: { type: string, format: date-time, nullable: true }
+        created_at: { type: string, format: date-time }
+    Notification:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        event: { type: string }
+        title: { type: string }
+        body: { type: string }
+        resource: { type: object, nullable: true, properties: { type: { type: string }, id: { type: string } } }
+        read_at: { type: string, format: date-time, nullable: true }
+        created_at: { type: string, format: date-time }
+    NotificationPreference:
+      type: object
+      properties:
+        event: { type: string }
+        label: { type: string }
+        in_app: { type: boolean }
+        mail: { type: boolean }
+    ApiKey:
+      type: object
+      properties:
+        id: { type: string, minLength: 26, maxLength: 26, example: 01j9x8b6d1v3y7z2q4w5e6r7t8 }
+        name: { type: string }
+        prefix: { type: string, example: bos_live_a1b2c3d }
+        created_by: { type: string, nullable: true }
+        last_used_at: { type: string, format: date-time, nullable: true }
+        expires_at: { type: string, format: date-time, nullable: true }
+        revoked_at: { type: string, format: date-time, nullable: true }
+        active: { type: boolean }
+        created_at: { type: string, format: date-time }
+    ActivityLog:
+      type: object
+      properties:
+        id: { type: integer }
+        action: { type: string, example: payment.succeeded }
+        actor: { type: object, properties: { type: { type: string, enum: [user, api_key, customer, system] }, id: { type: string, nullable: true }, label: { type: string, nullable: true } } }
+        resource: { type: object, nullable: true, properties: { type: { type: string }, id: { type: string } } }
+        metadata: { type: object }
+        ip: { type: string, nullable: true }
+        created_at: { type: string, format: date-time }

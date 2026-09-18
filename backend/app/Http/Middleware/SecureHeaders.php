@@ -25,7 +25,7 @@ class SecureHeaders
         if ($request->is('api/docs')) {
             // страница документации грузит UI с CDN и читает спецификацию с того же origin
             $cdn = parse_url((string) config('docs.scalar_cdn'), PHP_URL_HOST) ?: '';
-            $response->headers->set('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline' https://{$cdn}; style-src 'self' 'unsafe-inline' https://{$cdn} https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: https:; connect-src 'self'; frame-ancestors 'none'");
+            $response->headers->set('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline' https://{$cdn}; style-src 'self' 'unsafe-inline' https://{$cdn}; font-src 'self' data:; img-src 'self' data: https:; connect-src 'self'; frame-ancestors 'none'");
         } else {
             $response->headers->set('Content-Security-Policy', "default-src 'none'; frame-ancestors 'none'");
         }
