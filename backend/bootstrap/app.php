@@ -12,6 +12,7 @@ use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Middleware\SubstituteBindings;
 use Sentry\Laravel\Integration;
+use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 use Illuminate\Support\Facades\Broadcast;
 
 return Application::configure(basePath: dirname(__DIR__))
@@ -50,4 +51,11 @@ return Application::configure(basePath: dirname(__DIR__))
         $exceptions->render(fn (InvalidTransition|CurrencyMismatch $e, Request $request) => response()->json([
             'message' => $e->getMessage(),
         ], 409));
+
+        // стандартный текст 404 раскрывает имя класса модели и id - наружу отдаём общий
+        $exceptions->render(function (NotFoundHttpException $e, Request $request) {
+            if ($request->is('api/*') || $request->expectsJson()) {
+                return response()->json(['message' => 'Не найдено.'], 404);
+            }
+        });
     })->create();

@@ -129,3 +129,10 @@ it('rate limits payment requests per user', function () {
     }
     $this->postJson('/api/v1/payments', ['invoice_id' => $invoice])->assertStatus(429);
 });
+
+it('does not leak model class names in 404 responses', function () {
+    actingIn(organization());
+
+    $this->getJson('/api/v1/customers/01j9x8b6d1v3y7z2q4w5e6r7t8')->assertNotFound()->assertExactJson(['message' => 'Не найдено.']);
+    $this->getJson('/api/v1/nope')->assertNotFound()->assertExactJson(['message' => 'Не найдено.']);
+});
