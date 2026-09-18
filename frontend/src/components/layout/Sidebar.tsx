@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { NotificationBell } from "@/components/layout/NotificationBell";
 import { useLogout, useOrganization, useUser } from "@/hooks/useAuth";
 
 const nav = [
@@ -10,6 +11,7 @@ const nav = [
   { href: "/products", label: "Продукты" },
   { href: "/prices", label: "Цены" },
   { href: "/subscriptions", label: "Подписки" },
+  { href: "/coupons", label: "Купоны" },
   { href: "/invoices", label: "Инвойсы" },
   { href: "/payments", label: "Платежи" },
   { href: "/ledger", label: "Леджер" },
@@ -64,6 +66,10 @@ export function Sidebar() {
           );
         })}
       </nav>
+
+      <div className="border-t border-line p-3">
+        <NotificationBell />
+      </div>
 
       <div className="border-t border-line p-3">
         <div className="mb-2 px-2">

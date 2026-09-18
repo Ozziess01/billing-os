@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Button, Card, ErrorNote, Input } from "@/components/ui";
 import { useLogout, useOrganization, useUser } from "@/hooks/useAuth";
+import { useRealtime } from "@/hooks/useRealtime";
 import { session } from "@/lib/api";
 import { organizations as organizationApi } from "@/services/organizations";
 
@@ -25,6 +26,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   if (organizations.length === 0) {
     return <FirstOrganization onCreated={select} />;
   }
+
+  return <Shell>{children}</Shell>;
+}
+
+function Shell({ children }: { children: React.ReactNode }) {
+  useRealtime();
 
   return (
     <div className="flex min-h-screen">

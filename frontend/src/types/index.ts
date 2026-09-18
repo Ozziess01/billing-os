@@ -41,6 +41,7 @@ export interface Customer {
   name: string;
   email: string | null;
   description: string | null;
+  default_payment_method: string | null;
   metadata: Metadata;
   subscriptions_count?: number;
   subscriptions?: Subscription[];
@@ -72,6 +73,8 @@ export interface Price {
   unit_amount_formatted: string;
   billing_interval: BillingInterval;
   interval_count: number;
+  usage_type: "licensed" | "metered";
+  unit_amount_decimal: string | null;
   active: boolean;
   metadata: Metadata;
   created_at: string;
@@ -84,6 +87,7 @@ export interface SubscriptionItem {
   price_id: string;
   price?: Price;
   quantity: number;
+  usage_type?: "licensed" | "metered";
   amount?: Money;
 }
 
@@ -99,6 +103,9 @@ export interface Subscription {
   current_period_end: string;
   cancel_at_period_end: boolean;
   canceled_at: string | null;
+  cancel_reason: string | null;
+  ended_at: string | null;
+  coupon?: Coupon | null;
   items?: SubscriptionItem[];
   metadata: Metadata;
   created_at: string;
@@ -132,6 +139,10 @@ export interface Invoice {
   amount_paid: Money;
   amount_due: Money;
   description: string | null;
+  coupon_id: string | null;
+  auto_collect: boolean;
+  collection_attempts: number;
+  next_payment_attempt_at: string | null;
   period_start: string | null;
   period_end: string | null;
   due_at: string | null;
@@ -226,6 +237,71 @@ export interface WebhookEvent {
   error: string | null;
   payload: Record<string, unknown>;
   processed_at: string | null;
+  created_at: string;
+}
+
+export interface Coupon {
+  id: string;
+  code: string;
+  name: string;
+  type: "percent" | "fixed";
+  percent_off: number | null;
+  amount_off: Money | null;
+  currency: string | null;
+  duration: "once" | "forever";
+  redeem_by: string | null;
+  max_redemptions: number | null;
+  times_redeemed: number;
+  customer_id: string | null;
+  active: boolean;
+  valid: boolean;
+  created_at: string;
+}
+
+export interface UsageEvent {
+  id: string;
+  subscription_item_id: string;
+  customer_id: string;
+  quantity: number;
+  timestamp: string;
+  idempotency_key: string | null;
+  invoice_item_id: string | null;
+  created_at: string;
+}
+
+export interface UsageSummary {
+  subscription_id: string;
+  period_start: string;
+  period_end: string;
+  items: { subscription_item_id: string; price_id: string; units: number; unbilled_units: number; estimated_amount: number }[];
+}
+
+export interface AppNotification {
+  id: string;
+  event: string | null;
+  title: string;
+  body: string;
+  resource: { type: string; id: string } | null;
+  read_at: string | null;
+  created_at: string;
+}
+
+export interface NotificationPreference {
+  event: string;
+  label: string;
+  in_app: boolean;
+  mail: boolean;
+}
+
+export interface ApiKey {
+  id: string;
+  name: string;
+  prefix: string;
+  created_by: string | null;
+  last_used_at: string | null;
+  expires_at: string | null;
+  revoked_at: string | null;
+  active: boolean;
   created_at: string;
 }
 
