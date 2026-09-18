@@ -1,7 +1,6 @@
 <?php
 
 use App\Http\Controllers\Api\V1\ActivityController;
-use App\Http\Controllers\DocsController;
 use App\Http\Controllers\Api\V1\ApiKeyController;
 use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\CouponController;
@@ -18,6 +17,7 @@ use App\Http\Controllers\Api\V1\ProductController;
 use App\Http\Controllers\Api\V1\SubscriptionController;
 use App\Http\Controllers\Api\V1\UsageController;
 use App\Http\Controllers\Api\V1\WebhookController;
+use App\Http\Controllers\DocsController;
 use App\Http\Middleware\AuthenticatePortal;
 use App\Http\Middleware\IdempotentRequest;
 use App\Http\Middleware\ResolveOrganization;
