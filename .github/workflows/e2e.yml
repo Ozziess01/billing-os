@@ -1,0 +1,70 @@
+name: E2E
+
+# Поднимает production-стек (Caddy + TLS + собранные образы) и гоняет Playwright
+# через него же - тот путь, которым ходят пользователи.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  e2e:
+    name: Playwright against the production stack
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Local production env
+        run: sh scripts/local-prod-env.sh
+
+      - name: Build and start the stack
+        run: docker compose --env-file .env.prod -f docker-compose.prod.yml -p billingos-prod up -d --build --wait
+
+      - name: Smoke
+        run: |
+          curl -sk --fail https://localhost:8443/health/deep
+          curl -sk --fail -o /dev/null https://localhost:8443/login
+          curl -sk --fail -o /dev/null https://localhost:8443/api/openapi.yaml
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - run: npm ci --no-audit --no-fund
+        working-directory: frontend
+
+      - run: npx playwright install --with-deps chromium
+        working-directory: frontend
+
+      - name: E2E
+        env:
+          BOS_URL: https://localhost:8443
+          CI: "1"
+        run: npm run test:e2e
+        working-directory: frontend
+
+      - name: Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            frontend/playwright-report
+            frontend/test-results
+          retention-days: 7
+
+      - name: Stack logs
+        if: failure()
+        run: docker compose -p billingos-prod logs --no-color --tail=200
+
+      - name: Stop the stack
+        if: always()
+        run: docker compose -p billingos-prod down -v

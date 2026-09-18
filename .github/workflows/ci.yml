@@ -1,0 +1,129 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend (pint, phpstan, pest)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: billingos_test
+          POSTGRES_USER: billingos
+          POSTGRES_PASSWORD: billingos
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U billingos -d billingos_test"
+          --health-interval 5s --health-timeout 3s --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s --health-timeout 3s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.4"
+          extensions: pdo_pgsql, pgsql, intl, bcmath, zip, pcntl, redis
+          coverage: none
+
+      - name: Cache composer
+        uses: actions/cache@v4
+        with:
+          path: ~/.composer/cache
+          key: composer-${{ hashFiles('backend/composer.lock') }}
+
+      - run: composer install --no-interaction --prefer-dist --no-progress
+
+      - name: Dependency audit
+        run: composer audit --no-interaction
+
+      - name: Code style
+        run: vendor/bin/pint --test
+
+      - name: Static analysis
+        run: vendor/bin/phpstan analyse --no-progress --memory-limit=1G
+
+      - name: Tests
+        env:
+          APP_KEY: base64:Q1hjRk5uR0J3aE5wQ3ZnUjhZbnVMc2RtRXBaVGtXcUw=
+          DB_HOST: 127.0.0.1
+          REDIS_HOST: 127.0.0.1
+        run: php artisan test --compact
+
+  frontend:
+    name: Frontend (lint, types, vitest, build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - run: npm ci --no-audit --no-fund
+
+      - name: Dependency audit
+        run: npm audit --audit-level=high
+
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm run test:unit
+
+      - name: Production build
+        env:
+          NEXT_PUBLIC_API_URL: https://billing.example.com/api/v1
+          NEXT_PUBLIC_WS_HOST: billing.example.com
+          NEXT_TELEMETRY_DISABLED: 1
+        run: npm run build
+
+  images:
+    name: Production images build
+    runs-on: ubuntu-latest
+    needs: [backend, frontend]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Backend image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/php/Dockerfile.prod
+          push: false
+          tags: billingos/app:ci
+          cache-from: type=gha,scope=app
+          cache-to: type=gha,scope=app,mode=max
+
+      - name: Frontend image
+        uses: docker/build-push-action@v6
+        with:
+          context: frontend
+          push: false
+          tags: billingos/frontend:ci
+          build-args: |
+            NEXT_PUBLIC_API_URL=https://billing.example.com/api/v1
+            NEXT_PUBLIC_WS_HOST=billing.example.com
+            NEXT_PUBLIC_REVERB_KEY=ci
+          cache-from: type=gha,scope=frontend
+          cache-to: type=gha,scope=frontend,mode=max

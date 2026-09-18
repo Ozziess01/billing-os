@@ -20,6 +20,9 @@
     <php>
         <env name="APP_ENV" value="testing" force="true"/>
         <env name="APP_MAINTENANCE_DRIVER" value="file"/>
+        <env name="APP_URL" value="http://localhost:8090" force="true"/>
+        <env name="FRONTEND_URL" value="http://localhost:8090" force="true"/>
+        <env name="FAKE_WEBHOOK_URL" value="http://nginx/api/v1/webhooks/fake" force="true"/>
         <env name="BCRYPT_ROUNDS" value="4"/>
         <env name="BROADCAST_CONNECTION" value="null" force="true"/>
         <env name="CACHE_STORE" value="array" force="true"/>
