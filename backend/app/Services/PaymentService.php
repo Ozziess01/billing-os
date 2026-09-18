@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Audit\Activity;
 use App\Enums\PaymentStatus;
 use App\Events\Billing\PaymentFailed;
 use App\Events\Billing\PaymentSucceeded;
@@ -27,6 +28,7 @@ class PaymentService
         private readonly ProviderRegistry $providers,
         private readonly InvoiceService $invoices,
         private readonly LedgerService $ledger,
+        private readonly Activity $activity,
     ) {}
 
     public function pay(Invoice $invoice, string $paymentMethod, ?string $providerName = null, bool $automatic = false): Payment
@@ -105,6 +107,7 @@ class PaymentService
                     $this->ledger->postPayment($payment);
                     $this->invoices->applyPayment($payment);
                     PaymentSucceeded::dispatch($payment);
+                    $this->activity->record('payment.succeeded', $payment->organization_id, $payment, ['invoice_id' => $payment->invoice_id, 'amount' => $payment->amount, 'currency' => $payment->currency, 'automatic' => $payment->automatic]);
                     break;
 
                 case PaymentResult::FAILED:
@@ -116,6 +119,7 @@ class PaymentService
                         'next_action' => null,
                     ]);
                     PaymentFailed::dispatch($payment);
+                    $this->activity->record('payment.failed', $payment->organization_id, $payment, ['invoice_id' => $payment->invoice_id, 'code' => $result->failureCode, 'automatic' => $payment->automatic]);
                     break;
 
                 default:

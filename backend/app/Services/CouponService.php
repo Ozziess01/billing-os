@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Audit\Activity;
 use App\Enums\CouponType;
 use App\Models\Coupon;
 use App\Models\Organization;
@@ -11,6 +12,8 @@ use Illuminate\Validation\ValidationException;
 
 class CouponService
 {
+    public function __construct(private readonly Activity $activity) {}
+
     /** @param  array<string, mixed>  $data */
     public function create(Organization $organization, array $data): Coupon
     {
@@ -24,7 +27,10 @@ class CouponService
             throw ValidationException::withMessages(['currency' => 'Для фиксированной скидки нужна валюта.']);
         }
 
-        return Coupon::create(['organization_id' => $organization->id, ...$data]);
+        $coupon = Coupon::create(['organization_id' => $organization->id, ...$data]);
+        $this->activity->record('coupon.created', $organization->id, $coupon, ['code' => $coupon->code, 'type' => $coupon->type->value]);
+
+        return $coupon;
     }
 
     /**
@@ -59,6 +65,7 @@ class CouponService
                 'redeemed_at' => now(),
             ]);
             $subscription->update(['coupon_id' => $coupon->id]);
+            $this->activity->record('coupon.redeemed', $coupon->organization_id, $subscription, ['code' => $coupon->code]);
 
             return $coupon->refresh();
         });

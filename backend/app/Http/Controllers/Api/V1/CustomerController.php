@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api\V1;
 
+use App\Audit\Activity;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\CustomerRequest;
 use App\Http\Resources\CustomerResource;
@@ -15,7 +16,7 @@ use Illuminate\Validation\ValidationException;
 
 class CustomerController extends Controller
 {
-    public function __construct(private readonly CurrentOrganization $current) {}
+    public function __construct(private readonly CurrentOrganization $current, private readonly Activity $activity) {}
 
     public function index(Request $request): AnonymousResourceCollection
     {
@@ -43,6 +44,7 @@ class CustomerController extends Controller
         $this->assertExternalIdFree($request->validated('external_id'));
 
         $customer = Customer::create(['organization_id' => $this->current->id(), ...$request->validated()]);
+        $this->activity->record('customer.created', $customer->organization_id, $customer, ['name' => $customer->name]);
 
         return (new CustomerResource($customer))->response()->setStatusCode(201);
     }
@@ -63,6 +65,7 @@ class CustomerController extends Controller
         }
 
         $customer->update($request->validated());
+        $this->activity->record('customer.updated', $customer->organization_id, $customer, ['fields' => array_keys($request->validated())]);
 
         return new CustomerResource($customer);
     }
@@ -73,6 +76,7 @@ class CustomerController extends Controller
         $this->authorize('update', $customer);
 
         $created = $portal->createSession($customer, $request->user());
+        $this->activity->record('portal.session_created', $customer->organization_id, $customer);
 
         return response()->json(['data' => [
             'url' => $created['url'],
@@ -90,6 +94,7 @@ class CustomerController extends Controller
         }
 
         $customer->delete();
+        $this->activity->record('customer.deleted', $customer->organization_id, $customer, ['name' => $customer->name]);
 
         return response()->json(null, 204);
     }

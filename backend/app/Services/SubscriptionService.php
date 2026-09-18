@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Audit\Activity;
 use App\Enums\SubscriptionStatus;
 use App\Events\Billing\SubscriptionCanceled;
 use App\Events\Billing\SubscriptionCreated;
@@ -22,6 +23,7 @@ class SubscriptionService
         private readonly InvoiceService $invoices,
         private readonly CollectionService $collection,
         private readonly CouponService $coupons,
+        private readonly Activity $activity,
     ) {}
 
     /**
@@ -78,6 +80,7 @@ class SubscriptionService
             }
 
             SubscriptionCreated::dispatch($subscription);
+            $this->activity->record('subscription.created', $subscription->organization_id, $subscription, ['customer_id' => $customer->id, 'status' => $subscription->status->value, 'trial_days' => $trialEndsAt ? true : false]);
 
             return [$subscription, $invoice];
         });
@@ -170,6 +173,7 @@ class SubscriptionService
             }
 
             $subscription->update(['cancel_at_period_end' => true]);
+            $this->activity->record('subscription.cancel_scheduled', $subscription->organization_id, $subscription);
 
             return $subscription;
         });
@@ -197,6 +201,7 @@ class SubscriptionService
                 ->update(['auto_collect' => false, 'next_payment_attempt_at' => null]);
 
             SubscriptionCanceled::dispatch($subscription);
+            $this->activity->record('subscription.canceled', $subscription->organization_id, $subscription, ['reason' => $reason]);
 
             return $subscription;
         });
@@ -213,6 +218,7 @@ class SubscriptionService
             }
 
             $subscription->update(['cancel_at_period_end' => false]);
+            $this->activity->record('subscription.resumed', $subscription->organization_id, $subscription);
 
             return $subscription;
         });

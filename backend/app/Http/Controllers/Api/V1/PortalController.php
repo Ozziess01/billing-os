@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api\V1;
 
+use App\Audit\Activity;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\CustomerResource;
 use App\Http\Resources\InvoiceResource;
@@ -27,6 +28,7 @@ class PortalController extends Controller
         private readonly CurrentCustomer $current,
         private readonly SubscriptionService $subscriptions,
         private readonly PaymentService $payments,
+        private readonly Activity $activity,
     ) {}
 
     public function session(): JsonResponse
@@ -53,6 +55,7 @@ class PortalController extends Controller
 
         $customer = $this->current->customer();
         $customer->update($data);
+        $this->activity->record('portal.billing_updated', $customer->organization_id, $customer, ['fields' => array_keys($data)]);
 
         return new CustomerResource($customer);
     }

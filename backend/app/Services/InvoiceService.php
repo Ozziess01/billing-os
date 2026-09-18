@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Audit\Activity;
 use App\Enums\CouponDuration;
 use App\Enums\InvoiceStatus;
 use App\Events\Billing\InvoiceFinalized;
@@ -21,7 +22,7 @@ use Illuminate\Validation\ValidationException;
 
 class InvoiceService
 {
-    public function __construct(private readonly LedgerService $ledger) {}
+    public function __construct(private readonly LedgerService $ledger, private readonly Activity $activity) {}
 
     /**
      * Черновик с позициями. Позиция - либо цена (сумма берётся из неё), либо произвольная строка.
@@ -250,6 +251,7 @@ class InvoiceService
 
             $this->ledger->postInvoice($invoice);
             InvoiceFinalized::dispatch($invoice);
+            $this->activity->record('invoice.finalized', $invoice->organization_id, $invoice, ['number' => $number, 'total' => $invoice->total, 'currency' => $invoice->currency]);
 
             if ($invoice->total === 0) {
                 $invoice->transition(InvoiceStatus::Paid, ['paid_at' => now()]);
@@ -316,6 +318,7 @@ class InvoiceService
             }
 
             InvoiceVoided::dispatch($invoice);
+            $this->activity->record("invoice.{$reason}", $invoice->organization_id, $invoice, ['number' => $invoice->number, 'amount_due' => $invoice->amount_due]);
 
             return $invoice->load('items', 'customer');
         });

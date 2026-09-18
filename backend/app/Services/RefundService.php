@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Audit\Activity;
 use App\Enums\RefundStatus;
 use App\Events\Billing\RefundSucceeded;
 use App\Models\Payment;
@@ -23,6 +24,7 @@ class RefundService
     public function __construct(
         private readonly ProviderRegistry $providers,
         private readonly LedgerService $ledger,
+        private readonly Activity $activity,
     ) {}
 
     public function refund(Payment $payment, ?int $amount = null, ?string $reason = null): Refund
@@ -84,6 +86,7 @@ class RefundService
                 $payment->forceFill(['amount_refunded' => $payment->amount_refunded + $refund->amount])->save();
                 $this->ledger->postRefund($refund);
                 RefundSucceeded::dispatch($refund);
+                $this->activity->record('refund.succeeded', $refund->organization_id, $refund, ['payment_id' => $refund->payment_id, 'amount' => $refund->amount, 'currency' => $refund->currency]);
             } elseif ($result->status === RefundResult::FAILED) {
                 $refund->forceFill(['status' => RefundStatus::Failed, 'provider_refund_id' => $providerId, 'failure_message' => $result->failureMessage, 'failed_at' => now()])->save();
             } else {

@@ -16,6 +16,9 @@ return [
         'cancel_after_retries' => (bool) env('BILLING_CANCEL_AFTER_RETRIES', true),
     ],
 
+    // журнал действий хранится год
+    'activity_retention_days' => (int) env('BILLING_ACTIVITY_RETENTION_DAYS', 365),
+
     // ссылка в клиентский портал живёт сутки
     'portal_session_hours' => (int) env('BILLING_PORTAL_SESSION_HOURS', 24),
 

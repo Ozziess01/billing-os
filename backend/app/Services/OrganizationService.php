@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Audit\Activity;
 use App\Enums\Role;
 use App\Models\Organization;
 use App\Models\OrganizationMember;
@@ -12,6 +13,8 @@ use Illuminate\Validation\ValidationException;
 
 class OrganizationService
 {
+    public function __construct(private readonly Activity $activity) {}
+
     public function create(User $owner, string $name, ?string $currency = null): Organization
     {
         return DB::transaction(function () use ($owner, $name, $currency) {
@@ -45,7 +48,10 @@ class OrganizationService
             throw ValidationException::withMessages(['email' => 'Пользователь уже состоит в организации.']);
         }
 
-        return $organization->members()->create(['user_id' => $user->id, 'role' => $role]);
+        $member = $organization->members()->create(['user_id' => $user->id, 'role' => $role]);
+        $this->activity->record('member.added', $organization->id, $member, ['email' => $email, 'role' => $role->value]);
+
+        return $member;
     }
 
     public function changeRole(OrganizationMember $member, Role $role): OrganizationMember
@@ -55,6 +61,7 @@ class OrganizationService
         }
 
         $member->update(['role' => $role]);
+        $this->activity->record('member.role_changed', $member->organization_id, $member, ['role' => $role->value]);
 
         return $member;
     }
@@ -66,6 +73,7 @@ class OrganizationService
         }
 
         $member->delete();
+        $this->activity->record('member.removed', $member->organization_id, $member, ['user_id' => $member->user_id]);
     }
 
     public function transferOwnership(Organization $organization, User $to): void

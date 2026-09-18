@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Api\V1\ActivityController;
 use App\Http\Controllers\Api\V1\ApiKeyController;
 use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\CouponController;
@@ -106,6 +107,8 @@ Route::prefix('v1')->group(function () {
 
             Route::get('ledger/accounts', [LedgerController::class, 'accounts']);
             Route::get('ledger/transactions', [LedgerController::class, 'transactions']);
+
+            Route::get('activity', [ActivityController::class, 'index']);
 
             Route::get('notifications', [NotificationController::class, 'index']);
             Route::post('notifications/read-all', [NotificationController::class, 'readAll']);

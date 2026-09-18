@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api\V1;
 
+use App\Audit\Activity;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\ProductRequest;
 use App\Http\Resources\ProductResource;
@@ -14,7 +15,7 @@ use Illuminate\Validation\ValidationException;
 
 class ProductController extends Controller
 {
-    public function __construct(private readonly CurrentOrganization $current) {}
+    public function __construct(private readonly CurrentOrganization $current, private readonly Activity $activity) {}
 
     public function index(Request $request): AnonymousResourceCollection
     {
@@ -35,6 +36,7 @@ class ProductController extends Controller
         $this->authorize('create', Product::class);
 
         $product = Product::create(['organization_id' => $this->current->id(), ...$request->validated()]);
+        $this->activity->record('product.created', $product->organization_id, $product, ['name' => $product->name]);
 
         return (new ProductResource($product->load('prices')))->response()->setStatusCode(201);
     }
@@ -51,6 +53,7 @@ class ProductController extends Controller
         $this->authorize('update', $product);
 
         $product->update($request->validated());
+        $this->activity->record('product.updated', $product->organization_id, $product, ['fields' => array_keys($request->validated())]);
 
         return new ProductResource($product->load('prices'));
     }

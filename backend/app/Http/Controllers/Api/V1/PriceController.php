@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api\V1;
 
+use App\Audit\Activity;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\PriceRequest;
 use App\Http\Resources\PriceResource;
@@ -15,7 +16,7 @@ use Illuminate\Validation\ValidationException;
 
 class PriceController extends Controller
 {
-    public function __construct(private readonly CurrentOrganization $current) {}
+    public function __construct(private readonly CurrentOrganization $current, private readonly Activity $activity) {}
 
     public function index(Request $request): AnonymousResourceCollection
     {
@@ -50,6 +51,8 @@ class PriceController extends Controller
             ...array_filter($request->safe()->except('product_id'), fn ($v) => $v !== null),
         ]);
 
+        $this->activity->record('price.created', $price->organization_id, $price, ['unit_amount' => $price->unit_amount, 'currency' => $price->currency, 'usage_type' => $price->usage_type->value]);
+
         return (new PriceResource($price->load('product')))->response()->setStatusCode(201);
     }
 
@@ -65,6 +68,7 @@ class PriceController extends Controller
         $this->authorize('update', $price);
 
         $price->update($request->validated());
+        $this->activity->record('price.updated', $price->organization_id, $price, ['fields' => array_keys($request->validated())]);
 
         return new PriceResource($price->load('product'));
     }

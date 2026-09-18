@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Audit\Activity;
 use App\Models\ApiKey;
 use App\Models\Organization;
 use App\Models\User;
@@ -10,6 +11,8 @@ use Illuminate\Support\Str;
 
 class ApiKeyService
 {
+    public function __construct(private readonly Activity $activity) {}
+
     /** @return array{key: ApiKey, plain: string} plain показывается один раз */
     public function create(Organization $organization, User $creator, string $name, ?CarbonImmutable $expiresAt = null): array
     {
@@ -24,6 +27,8 @@ class ApiKeyService
             'expires_at' => $expiresAt,
         ]);
 
+        $this->activity->record('api_key.created', $organization->id, $key, ['name' => $name, 'prefix' => $key->prefix]);
+
         return ['key' => $key, 'plain' => $plain];
     }
 
@@ -31,6 +36,7 @@ class ApiKeyService
     {
         if ($key->revoked_at === null) {
             $key->forceFill(['revoked_at' => now()])->save();
+            $this->activity->record('api_key.revoked', $key->organization_id, $key, ['name' => $key->name]);
         }
 
         return $key;
