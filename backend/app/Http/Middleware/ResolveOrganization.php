@@ -2,6 +2,8 @@
 
 namespace App\Http\Middleware;
 
+use App\Auth\ApiKeyGuard;
+use App\Enums\Role;
 use App\Models\Organization;
 use App\Models\OrganizationMember;
 use App\Tenancy\CurrentOrganization;
@@ -21,6 +23,13 @@ class ResolveOrganization
     public function handle(Request $request, Closure $next): Response
     {
         $user = $request->user();
+
+        // запрос по API-ключу: организация - у ключа, права - не выше developer
+        if ($key = ApiKeyGuard::fromRequest($request)) {
+            $this->current->set($key->organization, $user, Role::Developer);
+
+            return $next($request);
+        }
         $memberships = OrganizationMember::query()->with('organization')->where('user_id', $user->id)->get();
         $header = trim((string) $request->header('X-Organization'));
 
