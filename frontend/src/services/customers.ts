@@ -6,6 +6,7 @@ export interface CustomerInput {
   email?: string | null;
   external_id?: string | null;
   description?: string | null;
+  default_payment_method?: string | null;
   metadata?: Metadata | null;
 }
 
@@ -15,4 +16,5 @@ export const customers = {
   create: (body: CustomerInput) => api.post<Wrapped<Customer>>("/customers", body),
   update: (id: string, body: Partial<CustomerInput>) => api.patch<Wrapped<Customer>>(`/customers/${id}`, body),
   remove: (id: string) => api.delete<void>(`/customers/${id}`),
+  portalSession: (id: string) => api.post<Wrapped<{ url: string; token: string; expires_at: string }>>(`/customers/${id}/portal-session`),
 };

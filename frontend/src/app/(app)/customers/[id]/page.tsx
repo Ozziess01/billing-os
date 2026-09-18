@@ -16,6 +16,7 @@ export default function CustomerPage() {
   const router = useRouter();
   const client = useQueryClient();
   const [editing, setEditing] = useState(false);
+  const [portalUrl, setPortalUrl] = useState<string | null>(null);
 
   const { data, isLoading, error } = useQuery({ queryKey: ["customers", id], queryFn: () => customers.get(id) });
   const update = useMutation({
@@ -25,6 +26,7 @@ export default function CustomerPage() {
       setEditing(false);
     },
   });
+  const portalLink = useMutation({ mutationFn: () => customers.portalSession(id), onSuccess: (res) => setPortalUrl(res.data.url) });
   const remove = useMutation({
     mutationFn: () => customers.remove(id),
     onSuccess: () => {
@@ -46,6 +48,9 @@ export default function CustomerPage() {
         subtitle={c.email ?? undefined}
         actions={
           <>
+            <Button variant="secondary" disabled={portalLink.isPending} onClick={() => portalLink.mutate()}>
+              Ссылка в портал
+            </Button>
             <Link href={`/invoices?customer_id=${c.id}`}>
               <Button variant="secondary">Инвойсы</Button>
             </Link>
@@ -61,7 +66,16 @@ export default function CustomerPage() {
           </>
         }
       />
-      {remove.error && <div className="mb-4"><ErrorNote error={remove.error} /></div>}
+      {(remove.error || portalLink.error) && <div className="mb-4"><ErrorNote error={remove.error ?? portalLink.error} /></div>}
+      {portalUrl && (
+        <Card className="mb-6 px-5 py-4">
+          <div className="text-xs font-medium text-muted">Ссылка в клиентский портал — показывается один раз, живёт сутки</div>
+          <div className="mt-1 flex items-center gap-2">
+            <a href={portalUrl} target="_blank" rel="noopener" className="truncate font-mono text-sm text-accent hover:underline">{portalUrl}</a>
+            <Button variant="ghost" size="sm" onClick={() => navigator.clipboard?.writeText(portalUrl)}>копировать</Button>
+          </div>
+        </Card>
+      )}
 
       <div className="grid gap-6 lg:grid-cols-3">
         <Card title="Карточка" className="lg:col-span-1">
@@ -71,6 +85,7 @@ export default function CustomerPage() {
             </Row>
             <Row label="Внешний ID">{c.external_id ? <span className="font-mono text-xs">{c.external_id}</span> : "—"}</Row>
             <Row label="Описание">{c.description ?? "—"}</Row>
+            <Row label="Автосписание">{c.default_payment_method ? <span className="font-mono text-xs">{c.default_payment_method}</span> : <span className="text-muted">нет платёжного метода</span>}</Row>
             <Row label="Создан">{formatDate(c.created_at, true)}</Row>
             {Object.keys(c.metadata ?? {}).length > 0 && (
               <Row label="Metadata">

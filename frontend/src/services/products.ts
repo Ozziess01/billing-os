@@ -13,6 +13,8 @@ export interface PriceInput {
   nickname?: string | null;
   currency: string;
   unit_amount: number;
+  usage_type?: "licensed" | "metered";
+  unit_amount_decimal?: string;
   billing_interval: BillingInterval;
   interval_count?: number;
 }

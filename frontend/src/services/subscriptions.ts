@@ -6,6 +6,7 @@ export interface SubscriptionInput {
   items: { price_id: string; quantity?: number }[];
   trial_days?: number;
   starts_at?: string;
+  coupon_code?: string;
   metadata?: Metadata | null;
 }
 

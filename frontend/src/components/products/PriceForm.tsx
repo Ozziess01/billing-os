@@ -18,6 +18,8 @@ export function PriceForm({ productId, onSubmit, pending, error }: { productId: 
     amount: "",
     billing_interval: "month" as BillingInterval,
     interval_count: "1",
+    usage_type: "licensed" as "licensed" | "metered",
+    unit_amount_decimal: "0.1",
   });
   const [localError, setLocalError] = useState<string | null>(null);
   const apiError = error instanceof ApiError ? error : null;
@@ -27,6 +29,24 @@ export function PriceForm({ productId, onSubmit, pending, error }: { productId: 
       className="space-y-3"
       onSubmit={(e) => {
         e.preventDefault();
+        if (form.usage_type === "metered") {
+          if (!/^\d+(\.\d+)?$/.test(form.unit_amount_decimal)) {
+            setLocalError("Введите цену за единицу, например 0.1");
+            return;
+          }
+          setLocalError(null);
+          onSubmit({
+            product_id: productId,
+            nickname: form.nickname || null,
+            currency: form.currency,
+            unit_amount: 0,
+            usage_type: "metered",
+            unit_amount_decimal: form.unit_amount_decimal,
+            billing_interval: form.billing_interval,
+            interval_count: Number(form.interval_count) || 1,
+          });
+          return;
+        }
         const amount = parseAmount(form.amount, form.currency);
         if (amount === null) {
           setLocalError("Введите сумму числом, например 19.99");
@@ -44,8 +64,16 @@ export function PriceForm({ productId, onSubmit, pending, error }: { productId: 
       }}
     >
       <Input label="Название цены" placeholder="Pro monthly" value={form.nickname} onChange={(e) => setForm({ ...form, nickname: e.target.value })} error={apiError?.field("nickname")} />
+      <Select label="Тип" value={form.usage_type} onChange={(e) => setForm({ ...form, usage_type: e.target.value as "licensed" | "metered" })}>
+        <option value="licensed">Фиксированная — сумма за период × количество</option>
+        <option value="metered">По использованию — единицы × цена, по факту за период</option>
+      </Select>
       <div className="grid grid-cols-2 gap-3">
-        <Input label="Сумма за единицу" inputMode="decimal" placeholder="19.99" required autoFocus value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} error={localError ?? apiError?.field("unit_amount")} hint="Хранится в минорных единицах: 19.99 → 1999" />
+        {form.usage_type === "metered" ? (
+          <Input label="Цена за единицу, в сотых долях валюты" inputMode="decimal" placeholder="0.1" required autoFocus value={form.unit_amount_decimal} onChange={(e) => setForm({ ...form, unit_amount_decimal: e.target.value })} error={localError ?? apiError?.field("unit_amount_decimal")} hint="0.1 = €0.001 за единицу; округление один раз на весь период" />
+        ) : (
+          <Input label="Сумма за единицу" inputMode="decimal" placeholder="19.99" required autoFocus value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} error={localError ?? apiError?.field("unit_amount")} hint="Хранится в минорных единицах: 19.99 → 1999" />
+        )}
         <Select label="Валюта" value={form.currency} onChange={(e) => setForm({ ...form, currency: e.target.value })} error={apiError?.field("currency")}>
           {CURRENCIES.map((c) => (
             <option key={c}>{c}</option>

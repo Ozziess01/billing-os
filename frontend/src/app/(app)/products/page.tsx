@@ -68,8 +68,12 @@ export default function ProductsPage() {
                 {p.prices.map((price) => (
                   <li key={price.id} className="flex items-center justify-between gap-4 px-5 py-2.5 text-sm">
                     <div className="flex items-center gap-3">
-                      <Money formatted={formatMoney(price.unit_amount, price.currency)} className="w-28" />
-                      <span className="text-muted">{intervalText(price)}</span>
+                      {price.usage_type === "metered" ? (
+                        <span className="w-28 font-mono">{price.unit_amount_decimal} {price.currency}/100</span>
+                      ) : (
+                        <Money formatted={formatMoney(price.unit_amount, price.currency)} className="w-28" />
+                      )}
+                      <span className="text-muted">{price.usage_type === "metered" ? `за единицу, ${intervalText(price)}` : intervalText(price)}</span>
                       {price.nickname && <span className="text-muted">· {price.nickname}</span>}
                       {!price.active && <Badge>неактивна</Badge>}
                     </div>

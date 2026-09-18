@@ -18,6 +18,7 @@ export function SubscriptionForm({ customerId, onSubmit, pending, error }: { cus
   const [customer, setCustomer] = useState(customerId ?? "");
   const [lines, setLines] = useState<Line[]>([{ price_id: "", quantity: "1" }]);
   const [trialDays, setTrialDays] = useState("0");
+  const [couponCode, setCouponCode] = useState("");
   const apiError = error instanceof ApiError ? error : null;
 
   const customerList = useQuery({ queryKey: ["customers", { per_page: 100 }], queryFn: () => customers.list({ per_page: 100 }) });
@@ -35,7 +36,7 @@ export function SubscriptionForm({ customerId, onSubmit, pending, error }: { cus
   const periodTotal = first
     ? lines.reduce((sum, line) => {
         const p = selected.find((s) => s.id === line.price_id);
-        return p && compatible(p) ? sum + p.unit_amount * (Number(line.quantity) || 1) : sum;
+        return p && compatible(p) && p.usage_type !== "metered" ? sum + p.unit_amount * (Number(line.quantity) || 1) : sum;
       }, 0)
     : 0;
 
@@ -48,6 +49,7 @@ export function SubscriptionForm({ customerId, onSubmit, pending, error }: { cus
           customer_id: customer,
           items: lines.filter((l) => l.price_id).map((l) => ({ price_id: l.price_id, quantity: Number(l.quantity) || 1 })),
           trial_days: Number(trialDays) || 0,
+          coupon_code: couponCode || undefined,
         });
       }}
     >
@@ -70,7 +72,7 @@ export function SubscriptionForm({ customerId, onSubmit, pending, error }: { cus
               {priceList.data?.data.map((p) => (
                 <option key={p.id} value={p.id} disabled={!compatible(p) && p.id !== line.price_id}>
                   {p.product?.name}
-                  {p.nickname ? ` (${p.nickname})` : ""} — {priceLabel(p)}
+                  {p.nickname ? ` (${p.nickname})` : ""} — {p.usage_type === "metered" ? `${p.unit_amount_decimal} ${p.currency}/100 за единицу, по факту` : priceLabel(p)}
                 </option>
               ))}
             </Select>
@@ -86,7 +88,10 @@ export function SubscriptionForm({ customerId, onSubmit, pending, error }: { cus
         </Button>
       </div>
 
-      <Input label="Триал, дней" type="number" min={0} max={365} value={trialDays} onChange={(e) => setTrialDays(e.target.value)} error={apiError?.field("trial_days")} hint="0 — без триала, подписка сразу активна" />
+      <div className="grid grid-cols-2 gap-3">
+        <Input label="Триал, дней" type="number" min={0} max={365} value={trialDays} onChange={(e) => setTrialDays(e.target.value)} error={apiError?.field("trial_days")} hint="0 — без триала: инвойс за первый период сразу" />
+        <Input label="Купон" placeholder="SAVE20" value={couponCode} onChange={(e) => setCouponCode(e.target.value.toUpperCase())} error={apiError?.field("coupon_code") ?? apiError?.field("coupon")} />
+      </div>
 
       {first && (
         <div className="rounded-md bg-panel-2 px-3 py-2 text-sm">

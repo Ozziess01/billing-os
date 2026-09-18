@@ -97,6 +97,13 @@ export default function InvoicePage() {
             <Row label="Оплачено"><Money formatted={formatMoney(inv.amount_paid.amount, inv.currency)} /></Row>
             <Row label="К оплате"><Money formatted={formatMoney(inv.amount_due.amount, inv.currency)} className={inv.amount_due.amount > 0 ? "font-medium" : ""} /></Row>
             {inv.due_at && <Row label="Срок оплаты">{formatDate(inv.due_at, true)}</Row>}
+            {inv.auto_collect && (
+              <Row label="Автосписание">
+                попыток: {inv.collection_attempts}
+                {inv.next_payment_attempt_at && <span className="text-muted"> · следующая {formatDate(inv.next_payment_attempt_at, true)}</span>}
+              </Row>
+            )}
+            {inv.discount.amount > 0 && <Row label="Скидка"><Money formatted={"−" + formatMoney(inv.discount.amount, inv.currency)} /></Row>}
             {inv.finalized_at && <Row label="Финализирован">{formatDate(inv.finalized_at, true)}</Row>}
             {inv.paid_at && <Row label="Оплачен">{formatDate(inv.paid_at, true)}</Row>}
             {inv.voided_at && <Row label="Аннулирован">{formatDate(inv.voided_at, true)}</Row>}

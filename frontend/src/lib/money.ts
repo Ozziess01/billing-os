@@ -75,8 +75,8 @@ function intervalPlural(interval: string, count: number): string {
 }
 
 /** "Pro plan (Extra seat) × 3" для списков подписок. */
-export function itemLabel(item: { quantity: number; price?: { nickname: string | null; product?: { name: string } } }): string {
+export function itemLabel(item: { quantity: number; price?: { nickname: string | null; usage_type?: string; product?: { name: string } } }): string {
   const name = item.price?.product?.name ?? "—";
   const nickname = item.price?.nickname ? ` (${item.price.nickname})` : "";
-  return `${name}${nickname} × ${item.quantity}`;
+  return item.price?.usage_type === "metered" ? `${name}${nickname} — по использованию` : `${name}${nickname} × ${item.quantity}`;
 }
