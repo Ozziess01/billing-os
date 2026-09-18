@@ -1,7 +1,15 @@
+import { withSentryConfig } from "@sentry/nextjs";
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  // production-образ копирует только .next/standalone + static, без node_modules проекта
+  output: "standalone",
+  poweredByHeader: false,
 };
 
-export default nextConfig;
+// Sentry: без DSN SDK не инициализируется, source maps не загружаются (нет токена)
+export default withSentryConfig(nextConfig, {
+  silent: true,
+  sourcemaps: { disable: true },
+  telemetry: false,
+});

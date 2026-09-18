@@ -11,6 +11,7 @@ use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Middleware\SubstituteBindings;
+use Sentry\Laravel\Integration;
 use Illuminate\Support\Facades\Broadcast;
 
 return Application::configure(basePath: dirname(__DIR__))
@@ -38,6 +39,9 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->appendToPriorityList(ResolveOrganization::class, IdempotentRequest::class);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
+        // Sentry получает исключения только при заданном SENTRY_LARAVEL_DSN
+        Integration::handles($exceptions);
+
         $exceptions->shouldRenderJsonWhen(
             fn (Request $request) => $request->is('api/*') || $request->expectsJson(),
         );
