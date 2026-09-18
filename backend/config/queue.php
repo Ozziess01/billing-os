@@ -70,7 +70,8 @@ return [
             'queue' => env('REDIS_QUEUE', 'default'),
             'retry_after' => (int) env('REDIS_QUEUE_RETRY_AFTER', 90),
             'block_for' => null,
-            'after_commit' => false,
+            // уведомления и вебхуки ставятся в очередь внутри транзакций: воркер не должен увидеть их раньше commit
+            'after_commit' => true,
         ],
 
         'deferred' => [

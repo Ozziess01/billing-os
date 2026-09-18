@@ -6,6 +6,7 @@ use App\Http\Controllers\Api\V1\CustomerController;
 use App\Http\Controllers\Api\V1\DashboardController;
 use App\Http\Controllers\Api\V1\InvoiceController;
 use App\Http\Controllers\Api\V1\LedgerController;
+use App\Http\Controllers\Api\V1\NotificationController;
 use App\Http\Controllers\Api\V1\OrganizationController;
 use App\Http\Controllers\Api\V1\PaymentController;
 use App\Http\Controllers\Api\V1\PriceController;
@@ -83,6 +84,12 @@ Route::prefix('v1')->group(function () {
 
             Route::get('ledger/accounts', [LedgerController::class, 'accounts']);
             Route::get('ledger/transactions', [LedgerController::class, 'transactions']);
+
+            Route::get('notifications', [NotificationController::class, 'index']);
+            Route::post('notifications/read-all', [NotificationController::class, 'readAll']);
+            Route::post('notifications/{id}/read', [NotificationController::class, 'read']);
+            Route::get('notifications/preferences', [NotificationController::class, 'preferences']);
+            Route::patch('notifications/preferences', [NotificationController::class, 'updatePreferences']);
 
             Route::get('webhooks/events', [WebhookController::class, 'events']);
             Route::post('providers/fake/payments/{providerPaymentId}/confirm', [WebhookController::class, 'confirmFakePayment']);

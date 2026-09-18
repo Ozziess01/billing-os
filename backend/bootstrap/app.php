@@ -9,6 +9,7 @@ use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Middleware\SubstituteBindings;
+use Illuminate\Support\Facades\Broadcast;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -16,6 +17,8 @@ return Application::configure(basePath: dirname(__DIR__))
         api: __DIR__.'/../routes/api.php',
         commands: __DIR__.'/../routes/console.php',
         channels: __DIR__.'/../routes/channels.php',
+        // /api/broadcasting/auth: авторизация приватных каналов по тому же Bearer-токену
+        then: fn () => Broadcast::routes(['prefix' => 'api', 'middleware' => ['auth:sanctum']]),
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
