@@ -1,0 +1,18 @@
+# Единственная точка входа снаружи. Сертификат: Let's Encrypt для реального домена,
+# внутренний CA для localhost (curl -k / доверить caddy root cert).
+{
+    admin off
+    email {$ACME_EMAIL:admin@localhost}
+}
+
+{$DOMAIN:localhost} {
+    encode zstd gzip
+
+    header {
+        # HSTS ставит само приложение только на https-запросах; тут - общие для статики
+        X-Content-Type-Options nosniff
+        -Server
+    }
+
+    reverse_proxy nginx:80
+}

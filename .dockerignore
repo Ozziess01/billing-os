@@ -1,6 +1,7 @@
 .git
 .github
-docs
+docs/*
+!docs/openapi.yaml
 bench
 backend/vendor
 backend/node_modules
@@ -17,3 +18,6 @@ frontend/node_modules
 frontend/.next
 frontend/test-results
 frontend/playwright-report
+.env.prod
+.env.prod.*
+!.env.prod.example
