@@ -12,8 +12,8 @@ Self-hosted биллинг и подписки для SaaS: клиенты, пр
 |---|---|---|
 | 1. Core Billing | организации и роли, клиенты, продукты, цены, подписки, дашборд | готово |
 | 2. Billing Engine | инвойсы, платежи, провайдер, вебхуки, идемпотентность, леджер, возвраты | готово |
-| 3. SaaS Features | триалы и продления, usage, купоны, ретраи, уведомления, портал, API-ключи | в работе |
-| 4. Production | безопасность, наблюдаемость, CI, E2E, prod-стек, документация | - |
+| 3. SaaS Features | триалы и продления, usage, купоны, ретраи, уведомления, портал, API-ключи | готово |
+| 4. Production | безопасность, наблюдаемость, CI, E2E, prod-стек, документация | в работе |
 
 ## Стек
 
@@ -94,6 +94,41 @@ POST /payments {invoice_id, payment_method}      Idempotency-Key: …
 
 Возврат - компенсирующая операция: оригинальный платёж не меняется, растёт только `amount_refunded`, в леджер уходит обратная проводка. `total_refunded ≤ total_captured` держат lock платежа, резерв под незавершённые возвраты и `CHECK` в базе. Повторный запрос с тем же `Idempotency-Key` возвращает тот же refund.
 
+### Жизненный цикл подписки
+
+```text
+создание ──(триал)──► trialing ──► конец триала ─┐
+    │                                             ▼
+    └──► инвойс за первый период ──► автосписание ──► active
+                                         │ отказ
+                                         ▼
+                              incomplete / past_due ──► ретраи +1д / +3д / +7д ──► canceled
+```
+
+- Подписка без триала сразу получает инвойс за первый период (`auto_collect`). Если у клиента есть `default_payment_method`, инвойс списывается тут же: успех - `active`, отказ - `incomplete`; без платёжного метода инвойс ждёт ручной оплаты, подписка `active`.
+- `subscriptions:renew` (каждую минуту) находит подписки с истёкшим периодом и ставит `RenewSubscription` в очередь. Продление сдвигает период одним `UPDATE … WHERE current_period_end = :expected` - повторный запуск job ничего не сдвинет, а инвойс за период создаётся один раз. `canceled` не продлевается никогда; `cancel_at_period_end` завершается ровно на границе периода.
+- Dunning: неудачное автосписание планирует следующую попытку по расписанию `[1, 3, 7]` дней, подписка - `past_due`; когда попытки кончились - `canceled` с `cancel_reason = payment_failed`, инвойс остаётся открытым. Счётчик попыток и `next_payment_attempt_at` фиксируются в базе до вызова провайдера, поэтому повтор job не создаёт вторую попытку.
+
+### Usage-based billing
+
+Цена с `usage_type = metered` хранит `unit_amount_decimal` - цену за единицу в минорных единицах с дробью (`0.1` = €0.001 за запрос). Использование приходит отчётами `POST /usage {subscription_item_id, quantity, idempotency_key}`; тот же ключ - то же событие, второго не будет (частичный уникальный индекс). При продлении использование за закончившийся период агрегируется в одну строку инвойса: `units × unit_amount_decimal` считается через bcmath и округляется один раз, события помечаются выставленными.
+
+### Купоны
+
+Процентные и фиксированные, `once` (первый инвойс) или `forever`, со сроком, лимитом использований и привязкой к клиенту. Лимит списывается атомарным `UPDATE … WHERE times_redeemed < max_redemptions` под lock купона - два параллельных запроса не превысят его. Скидка ложится в `invoices.discount`, `CHECK total = subtotal - discount` держит согласованность.
+
+### Уведомления и realtime
+
+Доменные события (`InvoiceFinalized`, `InvoicePaid`, `PaymentFailed`, `SubscriptionCreated/Canceled`, `RefundSucceeded`) слушают два listener'а. Первый шлёт уведомления участникам организации от developer и выше через Laravel Notifications: in-app (таблица с `dedupe_key` - дубликат события не задваивается), broadcast в `user.{id}` и почта, каналы - по настройкам пользователя. Второй кладёт сигнал в приватный канал `organization.{id}` (Reverb): без данных, только что изменилось - фронт перезапрашивает нужные запросы. Уведомления уходят в очередь после commit (`after_commit`), чтобы воркер не увидел событие раньше транзакции.
+
+### Клиентский портал
+
+`POST /customers/{id}/portal-session` выдаёт ссылку `/portal/{token}` на сутки; хранится только хеш токена. Портал живёт в `/api/v1/portal/*` по этому токену, без пользовательской учётки: подписки (отмена), инвойсы (просмотр, выгрузка CSV/JSON, оплата), история платежей, реквизиты и способ оплаты.
+
+### API-ключи
+
+`POST /api-keys` выпускает ключ `bos_live_…`, показывает его один раз и хранит sha256. Ключ ходит в те же маршруты (`Authorization: Bearer bos_live_…`), организация определяется по ключу, права - `developer`, что бы ни было у создателя. Отзыв и срок действия - в настройках.
+
 ## API
 
 ```text
@@ -119,9 +154,23 @@ POST   /api/v1/payments/{id}/refund     POST /api/v1/payments/{id}/cancel   GET 
 GET    /api/v1/ledger/accounts          GET /api/v1/ledger/transactions
 POST   /api/v1/webhooks/{provider}      GET /api/v1/webhooks/events
 POST   /api/v1/providers/fake/payments/{providerPaymentId}/confirm
+
+POST   /api/v1/subscriptions/{id}/coupon    { "coupon_code": "SAVE20" }
+GET    /api/v1/subscriptions/{id}/usage     сводка использования за период
+GET    /api/v1/usage                    POST /api/v1/usage { subscription_item_id, quantity, idempotency_key }
+GET    /api/v1/coupons                  POST /api/v1/coupons        GET|PATCH /api/v1/coupons/{id}
+GET    /api/v1/notifications            POST … /{id}/read   POST … /read-all   GET|PATCH … /preferences
+GET    /api/v1/api-keys                 POST /api/v1/api-keys       DELETE /api/v1/api-keys/{id}
+POST   /api/v1/customers/{id}/portal-session
+POST   /api/broadcasting/auth           авторизация приватных каналов Reverb
+
+GET    /api/v1/portal/session           PATCH /api/v1/portal/billing
+GET    /api/v1/portal/subscriptions     POST /api/v1/portal/subscriptions/{id}/cancel
+GET    /api/v1/portal/invoices          GET … /{id}   GET … /{id}/export?format=csv|json   POST … /{id}/pay
+GET    /api/v1/portal/payments
 ```
 
-Аутентификация - `Authorization: Bearer <token>` (Sanctum), контекст - `X-Organization`, идемпотентность - `Idempotency-Key`. Ошибки валидации - 422, нарушение доменных правил (недопустимый переход состояния, смешение валют, второй платёж в полёте) - 409.
+Аутентификация - `Authorization: Bearer <token>` (Sanctum) или ключ организации `bos_live_…`, контекст - `X-Organization` (для ключа - организация ключа), идемпотентность - `Idempotency-Key`. Портал - `Authorization: Bearer bps_…`. Ошибки валидации - 422, нарушение доменных правил (недопустимый переход состояния, смешение валют, второй платёж в полёте) - 409.
 
 ## Проверки
 
@@ -132,13 +181,13 @@ docker compose exec app vendor/bin/pint --test
 cd frontend && npm run lint && npm run typecheck && npm run test:unit
 ```
 
-Что покрыто тестами: изоляция организаций и RBAC по всем ресурсам; CRUD клиентов и продуктов; валидация цен (целые неотрицательные суммы, валюта из списка, интервалы); жизненный цикл подписки; арифметика денег; финализация инвойса с номером и проводкой, заморозка на уровне базы, `paid` не возвращается в `open`; платёж успех/отказ/повторная попытка, один платёж в полёте, async-платёж через вебхук, дубликаты вебхуков, replay старой подписи, `requires_action` через confirm; идемпотентность (тот же ответ, другой payload - 409, в полёте - 409, ключи per-organization, истечение); возвраты частичные и полные, запрет превышения (сервис и `CHECK`), компенсирующие проводки; леджер append-only, несбалансированная проводка отклоняется базой, событие проводится один раз.
+Что покрыто тестами: изоляция организаций и RBAC по всем ресурсам; CRUD клиентов и продуктов; валидация цен (целые неотрицательные суммы, валюта из списка, интервалы); жизненный цикл подписки; арифметика денег; финализация инвойса с номером и проводкой, заморозка на уровне базы, `paid` не возвращается в `open`; платёж успех/отказ/повторная попытка, один платёж в полёте, async-платёж через вебхук, дубликаты вебхуков, replay старой подписи, `requires_action` через confirm; идемпотентность (тот же ответ, другой payload - 409, в полёте - 409, ключи per-organization, истечение); возвраты частичные и полные, запрет превышения (сервис и `CHECK`), компенсирующие проводки; леджер append-only, несбалансированная проводка отклоняется базой, событие проводится один раз; продления и окончание триала, dunning по расписанию с отменой после последней попытки, восстановление past_due после успешного ретрая, отмена на границе периода, стоп автосписания у отменённой; usage с дедупом отчётов и одним округлением; купоны с лимитом, сроком, привязкой к клиенту и `once`/`forever`; уведомления по ролям, дедуп, настройки каналов, broadcast-события и авторизация канала; портал с изоляцией клиента, выгрузкой и оплатой; API-ключи с хешем, капом прав, отзывом и сроком.
 
 ## Структура
 
 ```text
-backend/    Laravel: app/Billing (Money, Currency), app/Payments (провайдер, FakeProvider), app/Tenancy, app/Services, app/Policies, app/Http
-frontend/   Next.js: src/app (страницы), src/components, src/services (API), src/lib (деньги, форматирование)
+backend/    Laravel: app/Billing (Money, Currency), app/Payments (провайдер, FakeProvider), app/Tenancy, app/Auth (ApiKeyGuard), app/Services, app/Listeners, app/Notifications, app/Policies, app/Http
+frontend/   Next.js: src/app (страницы, /portal/[token] - кабинет клиента), src/components, src/services (API), src/lib (деньги, echo)
 docker/     php (образ + entrypoint), nginx, postgres
 docs/       архитектура, безопасность, деплой, бенчмарки, OpenAPI - появятся по мере фаз
 ```
