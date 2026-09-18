@@ -2,8 +2,10 @@
 
 use App\Billing\CurrencyMismatch;
 use App\Billing\InvalidTransition;
+use App\Http\Middleware\CountRequests;
 use App\Http\Middleware\IdempotentRequest;
 use App\Http\Middleware\ResolveOrganization;
+use App\Http\Middleware\SecureHeaders;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -23,6 +25,10 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->trustProxies(at: '*');
+
+        // заголовки безопасности - на все ответы; счётчики /metrics - на API
+        $middleware->append(SecureHeaders::class);
+        $middleware->api(prepend: [CountRequests::class]);
 
         // API без сессий и страниц входа: гостю всегда отвечаем 401 JSON, а не редиректом
         $middleware->redirectGuestsTo(fn () => null);
