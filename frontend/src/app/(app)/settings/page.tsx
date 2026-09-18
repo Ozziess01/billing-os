@@ -5,6 +5,7 @@ import { useState } from "react";
 import { Badge, Button, Card, Empty, ErrorNote, Input, PageTitle, Select, Table, Td, Th } from "@/components/ui";
 import { useOrganization, useUser } from "@/hooks/useAuth";
 import { formatDate } from "@/lib/format";
+import { ApiKeysCard } from "@/components/settings/ApiKeysCard";
 import { organizations } from "@/services/organizations";
 import type { Role } from "@/types";
 
@@ -137,6 +138,8 @@ export default function SettingsPage() {
             </form>
           )}
         </Card>
+
+        {canManage && <ApiKeysCard />}
 
         <Card title="Роли">
           <div className="grid gap-4 px-5 py-4 text-sm md:grid-cols-4">
