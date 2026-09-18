@@ -118,7 +118,7 @@ it('records api key and portal actors', function () {
         ->and(ActivityLog::query()->where('action', 'portal.billing_updated')->where('actor_type', 'customer')->where('actor_id', $customer->id)->exists())->toBeTrue();
 });
 
-it('rate limits payment requests per user', function () {
+it('rate limits payment requests per user, not per ip', function () {
     $organization = organization();
     actingIn($organization);
     $invoice = openInvoice($organization);
@@ -128,6 +128,22 @@ it('rate limits payment requests per user', function () {
         $this->postJson('/api/v1/payments', ['invoice_id' => $invoice]);
     }
     $this->postJson('/api/v1/payments', ['invoice_id' => $invoice])->assertStatus(429);
+
+    // у другого пользователя с того же адреса свой счётчик
+    actingIn($organization, Role::Admin);
+    $this->postJson('/api/v1/payments', ['invoice_id' => $invoice])->assertStatus(422);
+});
+
+it('keeps rate limits of different endpoints apart', function () {
+    $organization = organization();
+    actingIn($organization);
+    $invoice = openInvoice($organization);
+
+    // 70 usage-запросов в лимит 600 не должны выбирать лимит платежей (60) того же пользователя
+    for ($i = 0; $i < 70; $i++) {
+        $this->postJson('/api/v1/usage', []);
+    }
+    $this->postJson('/api/v1/payments', ['invoice_id' => $invoice])->assertStatus(422)->assertHeader('X-RateLimit-Remaining', '59');
 });
 
 it('does not leak model class names in 404 responses', function () {

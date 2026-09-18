@@ -29,10 +29,10 @@ Route::get('docs', [DocsController::class, 'ui']);
 
 Route::prefix('v1')->group(function () {
     // провайдер стучится сюда без токена: доверие только по подписи тела
-    Route::post('webhooks/{provider}', [WebhookController::class, 'handle'])->middleware('throttle:120,1');
+    Route::post('webhooks/{provider}', [WebhookController::class, 'handle'])->middleware('throttle:webhooks');
 
     // кабинет клиента: токен сессии портала вместо пользовательской учётки
-    Route::prefix('portal')->middleware([AuthenticatePortal::class, 'throttle:120,1'])->group(function () {
+    Route::prefix('portal')->middleware([AuthenticatePortal::class, 'throttle:portal'])->group(function () {
         Route::get('session', [PortalController::class, 'session']);
         Route::patch('billing', [PortalController::class, 'updateBilling']);
         Route::get('subscriptions', [PortalController::class, 'subscriptions']);
@@ -44,8 +44,8 @@ Route::prefix('v1')->group(function () {
         Route::get('payments', [PortalController::class, 'payments']);
     });
 
-    Route::post('auth/register', [AuthController::class, 'register'])->middleware('throttle:10,1');
-    Route::post('auth/login', [AuthController::class, 'login'])->middleware('throttle:20,1');
+    Route::post('auth/register', [AuthController::class, 'register'])->middleware('throttle:register');
+    Route::post('auth/login', [AuthController::class, 'login'])->middleware('throttle:login');
 
     // пользовательский токен Sanctum или ключ интеграции организации
     Route::middleware('auth:sanctum,api-key')->group(function () {
@@ -85,7 +85,7 @@ Route::prefix('v1')->group(function () {
             Route::get('subscriptions/{subscription}/usage', [UsageController::class, 'summary']);
 
             Route::get('usage', [UsageController::class, 'index']);
-            Route::post('usage', [UsageController::class, 'store'])->middleware('throttle:600,1');
+            Route::post('usage', [UsageController::class, 'store'])->middleware('throttle:usage');
 
             Route::get('coupons', [CouponController::class, 'index']);
             Route::post('coupons', [CouponController::class, 'store']);
@@ -104,9 +104,9 @@ Route::prefix('v1')->group(function () {
 
             // финансовые POST принимают Idempotency-Key: повтор с тем же ключом отдаёт первый ответ
             Route::get('payments', [PaymentController::class, 'index']);
-            Route::post('payments', [PaymentController::class, 'store'])->middleware([IdempotentRequest::class, 'throttle:60,1']);
+            Route::post('payments', [PaymentController::class, 'store'])->middleware([IdempotentRequest::class, 'throttle:payments']);
             Route::get('payments/{payment}', [PaymentController::class, 'show']);
-            Route::post('payments/{payment}/refund', [PaymentController::class, 'refund'])->middleware([IdempotentRequest::class, 'throttle:60,1']);
+            Route::post('payments/{payment}/refund', [PaymentController::class, 'refund'])->middleware([IdempotentRequest::class, 'throttle:payments']);
             Route::post('payments/{payment}/cancel', [PaymentController::class, 'cancel']);
             Route::get('refunds', [PaymentController::class, 'refunds']);
 
