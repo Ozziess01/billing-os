@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\CustomerRequest;
 use App\Http\Resources\CustomerResource;
 use App\Models\Customer;
+use App\Services\PortalService;
 use App\Tenancy\CurrentOrganization;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -64,6 +65,20 @@ class CustomerController extends Controller
         $customer->update($request->validated());
 
         return new CustomerResource($customer);
+    }
+
+    /** Ссылка в клиентский портал: живёт сутки, показывается один раз. */
+    public function portalSession(Request $request, Customer $customer, PortalService $portal): JsonResponse
+    {
+        $this->authorize('update', $customer);
+
+        $created = $portal->createSession($customer, $request->user());
+
+        return response()->json(['data' => [
+            'url' => $created['url'],
+            'token' => $created['token'],
+            'expires_at' => $created['session']->expires_at,
+        ]], 201);
     }
 
     public function destroy(Customer $customer): JsonResponse

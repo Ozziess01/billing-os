@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Api\V1\ApiKeyController;
 use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\CouponController;
 use App\Http\Controllers\Api\V1\CustomerController;
@@ -9,11 +10,13 @@ use App\Http\Controllers\Api\V1\LedgerController;
 use App\Http\Controllers\Api\V1\NotificationController;
 use App\Http\Controllers\Api\V1\OrganizationController;
 use App\Http\Controllers\Api\V1\PaymentController;
+use App\Http\Controllers\Api\V1\PortalController;
 use App\Http\Controllers\Api\V1\PriceController;
 use App\Http\Controllers\Api\V1\ProductController;
 use App\Http\Controllers\Api\V1\SubscriptionController;
 use App\Http\Controllers\Api\V1\UsageController;
 use App\Http\Controllers\Api\V1\WebhookController;
+use App\Http\Middleware\AuthenticatePortal;
 use App\Http\Middleware\IdempotentRequest;
 use App\Http\Middleware\ResolveOrganization;
 use Illuminate\Support\Facades\Route;
@@ -22,10 +25,24 @@ Route::prefix('v1')->group(function () {
     // провайдер стучится сюда без токена: доверие только по подписи тела
     Route::post('webhooks/{provider}', [WebhookController::class, 'handle'])->middleware('throttle:120,1');
 
+    // кабинет клиента: токен сессии портала вместо пользовательской учётки
+    Route::prefix('portal')->middleware([AuthenticatePortal::class, 'throttle:120,1'])->group(function () {
+        Route::get('session', [PortalController::class, 'session']);
+        Route::patch('billing', [PortalController::class, 'updateBilling']);
+        Route::get('subscriptions', [PortalController::class, 'subscriptions']);
+        Route::post('subscriptions/{id}/cancel', [PortalController::class, 'cancelSubscription']);
+        Route::get('invoices', [PortalController::class, 'invoices']);
+        Route::get('invoices/{id}', [PortalController::class, 'invoice']);
+        Route::get('invoices/{id}/export', [PortalController::class, 'export']);
+        Route::post('invoices/{id}/pay', [PortalController::class, 'pay']);
+        Route::get('payments', [PortalController::class, 'payments']);
+    });
+
     Route::post('auth/register', [AuthController::class, 'register'])->middleware('throttle:10,1');
     Route::post('auth/login', [AuthController::class, 'login'])->middleware('throttle:20,1');
 
-    Route::middleware('auth:sanctum')->group(function () {
+    // пользовательский токен Sanctum или ключ интеграции организации
+    Route::middleware('auth:sanctum,api-key')->group(function () {
         Route::post('auth/logout', [AuthController::class, 'logout']);
         Route::get('auth/me', [AuthController::class, 'me']);
 
@@ -44,6 +61,11 @@ Route::prefix('v1')->group(function () {
             Route::get('dashboard', DashboardController::class);
 
             Route::apiResource('customers', CustomerController::class);
+            Route::post('customers/{customer}/portal-session', [CustomerController::class, 'portalSession']);
+
+            Route::get('api-keys', [ApiKeyController::class, 'index']);
+            Route::post('api-keys', [ApiKeyController::class, 'store']);
+            Route::delete('api-keys/{key}', [ApiKeyController::class, 'destroy']);
             Route::apiResource('products', ProductController::class);
             Route::apiResource('prices', PriceController::class);
 

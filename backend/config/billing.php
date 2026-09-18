@@ -16,6 +16,9 @@ return [
         'cancel_after_retries' => (bool) env('BILLING_CANCEL_AFTER_RETRIES', true),
     ],
 
+    // ссылка в клиентский портал живёт сутки
+    'portal_session_hours' => (int) env('BILLING_PORTAL_SESSION_HOURS', 24),
+
     'default_provider' => env('BILLING_PROVIDER', 'fake'),
 
     'providers' => [
