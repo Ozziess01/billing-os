@@ -12,7 +12,9 @@ RUN apk add --no-cache icu-libs libzip libpq oniguruma \
     && apk del .build-deps \
     && rm -rf /tmp/pear
 
-# код в образе не меняется: opcache без проверки mtime, JIT включён
+# код в образе не меняется: opcache без проверки mtime, JIT включён.
+# php-fpm static: 20 воркеров сразу, а не по одному под нагрузкой (dynamic
+# первые секунды после старта держит запросы в очереди, пока плодит процессы)
 RUN { \
         echo 'opcache.enable=1'; \
         echo 'opcache.enable_cli=1'; \
@@ -33,7 +35,7 @@ RUN { \
         echo 'upload_max_filesize=10M'; \
         echo 'post_max_size=10M'; \
     } > /usr/local/etc/php/conf.d/production.ini \
-    && sed -i 's/^pm.max_children = .*/pm.max_children = 20/; s/^;pm.max_requests = .*/pm.max_requests = 500/; s/^user = /;user = /; s/^group = /;group = /' /usr/local/etc/php-fpm.d/www.conf
+    && sed -i 's/^pm = dynamic/pm = static/; s/^pm.max_children = .*/pm.max_children = 20/; s/^;pm.max_requests = .*/pm.max_requests = 500/; s/^user = /;user = /; s/^group = /;group = /' /usr/local/etc/php-fpm.d/www.conf
 
 WORKDIR /var/www/html
 
